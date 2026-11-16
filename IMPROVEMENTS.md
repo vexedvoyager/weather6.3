@@ -519,6 +519,18 @@ it), but should be fixed together with or before any future live-mode
 consideration - otherwise the safety check would be actively misleading
 rather than just
 
+### 28. Open-position gauges on the dashboard (display only)
+
+One needle gauge per open position in the dashboard's "Open positions"
+section: needle = current midpoint price of YOUR side (chance it wins),
+tick = purchase price, green/red arc for the change, plus "Sell now for
+X¢" using the bid. No price history.
+
+Display only - nothing in forecasting, probability, edge, guards, sizing
+or settlement reads these prices. The price-saving step in Price Check
+runs after all trading logic in its own try/except. BOT_VERSION stays
+v6.3 (no model/strategy change). Full plan: "claude/v6.4-plan.md" in the
+Weather Bot Claude project.
 ---
 
 **Dropped the backtest feature entirely (in v2.0).** After finding that
