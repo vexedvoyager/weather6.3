@@ -144,9 +144,9 @@
 
   <div class="conditions">
     <div><span class="label">Mode</span><span class="value">PAPER</span></div>
-    <div><span class="label">Deployed</span><span class="value">$28.38 / $50.00</span></div>
-    <div><span class="label">Open positions</span><span class="value">6</span></div>
-    <div><span class="label">Last updated</span><span class="value">2026-11-17 19:54 UTC</span></div>
+    <div><span class="label">Deployed</span><span class="value">$42.31 / $50.00</span></div>
+    <div><span class="label">Open positions</span><span class="value">9</span></div>
+    <div><span class="label">Last updated</span><span class="value">2026-11-18 02:10 UTC</span></div>
   </div>
 
   <section>
@@ -198,11 +198,41 @@
   </section>
 
   <section>
-    <h2>Open positions (6)</h2>
+    <h2>Open positions (9)</h2>
     <p class="neutral" style="margin: 4px 0 12px">Market day = the date the contract is about. Opened/settled times are UTC.</p>
     <table>
       <tr><th>City</th><th>Market day</th><th>Contract</th><th>Side</th><th>Position</th><th>Model</th><th>Opened</th><th>Status</th></tr>
       
+    <tr>
+      <td>Miami</td>
+      <td>Nov 18</td>
+      <td>high < 78°F</td>
+      <td>YES</td>
+      <td>29x @ 17&cent;</td>
+      <td>44%</td>
+      <td class="neutral">Nov 18, 02:10 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
+    <tr>
+      <td>New York</td>
+      <td>Nov 18</td>
+      <td>high 64-65°F <span class="flag">[!]</span></td>
+      <td>NO</td>
+      <td>5x @ 84&cent;</td>
+      <td>1.0%</td>
+      <td class="neutral">Nov 18, 02:10 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
+    <tr>
+      <td>Chicago</td>
+      <td>Nov 18</td>
+      <td>high 62-63°F <span class="flag">[!]</span></td>
+      <td>NO</td>
+      <td>10x @ 48&cent;</td>
+      <td>1.0%</td>
+      <td class="neutral">Nov 18, 02:10 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
     <tr>
       <td>Los Angeles</td>
       <td>Nov 17</td>
@@ -653,11 +683,11 @@ const ctx = document.getElementById('pnlChart').getContext('2d');
 new Chart(ctx, {
   type: 'line',
   data: {
-    labels: ["10-04", "10-05", "10-06", "10-07", "10-08", "10-09", "10-10", "10-11", "10-12", "10-13", "10-14", "10-15", "10-16", "10-17", "10-18", "10-19", "10-20", "10-21", "10-22", "10-23", "10-24", "10-25", "10-26", "10-27", "10-28", "10-29", "10-30", "10-31", "11-01", "11-02", "11-03", "11-04", "11-05", "11-06", "11-07", "11-08", "11-09", "11-10", "11-11", "11-12", "11-13", "11-14", "11-15", "11-16", "11-17"],
+    labels: ["10-05", "10-06", "10-07", "10-08", "10-09", "10-10", "10-11", "10-12", "10-13", "10-14", "10-15", "10-16", "10-17", "10-18", "10-19", "10-20", "10-21", "10-22", "10-23", "10-24", "10-25", "10-26", "10-27", "10-28", "10-29", "10-30", "10-31", "11-01", "11-02", "11-03", "11-04", "11-05", "11-06", "11-07", "11-08", "11-09", "11-10", "11-11", "11-12", "11-13", "11-14", "11-15", "11-16", "11-17", "11-18"],
     datasets: [
       {
         label: 'Cumulative P&L ($)',
-        data: [-7.26, -14.81, -16.43, -27.36, -33.94, -45.37, -53.08, -82.14, -70.94, -94.5, -107.23, -110.38, -123.42, -133.84, -142.8, -164.43, -169.39, -196.04, -191.92, -212.68, -217.71, -202.52, -194.68, -228.04, -232.71, -258.69, -256.29, -269.5, -275.53, -293.15, -291.78, -284.28, -293.33, -272.58, -262.39, -271.44, -285.75, -295.38, -294.24, -284.45, -274.78, -236.76, -238.77, -230.09, -242.38],
+        data: [-7.55, -9.17, -20.1, -26.68, -38.11, -45.82, -74.88, -63.68, -87.24, -99.97, -103.12, -116.16, -126.58, -135.54, -157.17, -162.13, -188.78, -184.66, -205.42, -210.45, -195.26, -187.42, -220.78, -225.45, -251.43, -249.03, -262.24, -268.27, -285.89, -284.52, -277.02, -286.07, -265.32, -255.13, -264.18, -278.49, -288.12, -286.98, -277.19, -267.52, -229.5, -231.51, -222.83, -235.12, -235.12],
         borderColor: '#E8A33D',
         backgroundColor: 'rgba(232, 163, 61, 0.12)',
         borderWidth: 2,
