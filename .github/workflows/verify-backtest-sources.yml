@@ -1,0 +1,46 @@
+name: Verify Backtest Sources
+
+# Manual only. Step 1 of the backtest plan: checks that NOAA's AWS archive has
+# the NBP bulletins the bot reads, that the bot's parser reads them, and that
+# Kalshi still serves settled markets with outcomes and hourly prices for the
+# same dates. Read-only: never trades and never writes to the database.
+#
+# After it finishes, download the "backtest-source-check" artifact (a text
+# file) and upload it to Claude.
+on:
+  workflow_dispatch:
+    inputs:
+      dates:
+        description: "NBM run dates to test, comma-separated (markets are checked for the day after)"
+        required: false
+        default: "2025-11-15,2025-05-15,2024-11-15"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run source check
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          CHECK_DATES: ${{ github.event.inputs.dates }}
+        run: python -m src.verify_backtest_sources --dates "$CHECK_DATES" 2>&1 | tee backtest_source_check.txt
+
+      - name: Save result as a downloadable file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-source-check
+          path: backtest_source_check.txt
