@@ -1,0 +1,94 @@
+name: Run Backtest
+
+# Manual only. Replays archived NOAA forecasts against settled Kalshi markets
+# (see src/backtest.py and "claude/backtest-plan.md" in the Weather Bot Claude
+# project). Never trades and never touches data/trades.db: everything goes into
+# data/backtest.db, which is saved back to the repo after EACH month - so if a
+# run stops part way, just run the same months again and it picks up where it
+# left off.
+#
+# Runs about 10 minutes per month. Do up to ~12 months per run.
+# When it finishes, download the "backtest-report" artifact and upload it to Claude.
+on:
+  workflow_dispatch:
+    inputs:
+      months:
+        description: "Months to collect, e.g. 2025-03 or 2024-11..2025-10 (leave empty to only rebuild the report)"
+        required: false
+        default: ""
+
+concurrency:
+  group: backtest-db-writer      # one backtest at a time; never blocks Price Check
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Collect months (saving after each one)
+        if: github.event.inputs.months != ''
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          MONTHS: ${{ github.event.inputs.months }}
+        run: |
+          git config user.name "predict-weather-bot"
+          git config user.email "actions@github.com"
+          save() {
+            git add data/backtest.db
+            git diff --quiet --cached && return 0
+            git commit -m "$1"
+            # Price Check pushes every 5 minutes; rebase onto it and retry.
+            for i in 1 2 3 4 5 6; do
+              if git pull --rebase origin "$GITHUB_REF_NAME" && git push; then return 0; fi
+              sleep $((i * 15))
+            done
+            echo "::warning::could not push backtest.db after 6 tries"
+            return 1
+          }
+          for m in $(python -c "from src.backtest import parse_months; import os; print(' '.join(f'{y}-{mo:02d}' for y, mo in parse_months(os.environ['MONTHS'])))"); do
+            echo "::group::Month $m"
+            python -m src.backtest --months "$m"
+            echo "::endgroup::"
+            save "Backtest data $m"
+          done
+
+      - name: Build report
+        if: always()
+        run: python -m src.backtest_report | tee backtest_report.txt
+
+      - name: Save report to repo
+        if: always()
+        run: |
+          git config user.name "predict-weather-bot"
+          git config user.email "actions@github.com"
+          git add data/backtest_reports/ data/backtest.db 2>/dev/null || true
+          git diff --quiet --cached && exit 0
+          git commit -m "Backtest report $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          for i in 1 2 3 4 5 6; do
+            if git pull --rebase origin "$GITHUB_REF_NAME" && git push; then exit 0; fi
+            sleep $((i * 15))
+          done
+          echo "::warning::could not push the report; it is still in the downloadable artifact"
+
+      - name: Upload report and database
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-report
+          path: |
+            backtest_report.txt
+            data/backtest.db
+          if-no-files-found: ignore
