@@ -1,0 +1,44 @@
+name: Capture NBM Fixtures
+
+# Manual only. Saves real excerpts of NOAA's hourly, short-range and
+# probabilistic NBM bulletins for the stations in config.yaml, so the
+# calendar-day-high parser is built against real data. Read-only: no Kalshi
+# access, never trades, never touches any database.
+#
+# When it finishes, download the "nbm-fixtures" artifact and upload it to Claude.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "NBM runs to capture, comma-separated (date T hour, UTC)"
+        required: false
+        default: "2024-12-07T13,2025-11-15T13,2026-11-16T13"
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Capture bulletin excerpts
+        env:
+          RUNS: ${{ github.event.inputs.runs }}
+        run: python -m src.capture_nbm_fixtures --runs "$RUNS"
+
+      - name: Save excerpts as a downloadable file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nbm-fixtures
+          path: nbm_fixtures/
+          if-no-files-found: warn
