@@ -80,3 +80,18 @@ def test_snippet_only_includes_viable_unconfigured_cities():
     assert "FILL_IN" in text
     assert candidate_snippet([configured]) == []
     assert len(format_rows([viable])) == 2
+
+
+def test_is_daily_low_series():
+    from src.list_kalshi_series import is_daily_low_series
+    assert is_daily_low_series({"ticker": "KXLOWTNYC"})
+    assert not is_daily_low_series({"ticker": "KXHIGHNY"})
+
+
+def test_low_series_are_paired_only_with_the_same_station():
+    from src.list_kalshi_series import low_series_by_city
+    rows = [{"series": "KXLOWTNYC", "icao": "KNYC"}, {"series": "KXLOWTCHI", "icao": "KORD"},
+            {"series": "KXLOWTMIA", "icao": "KMIA"}]
+    stations = {"KNYC": "New York", "KMDW": "Chicago", "KMIA": "Miami"}
+    # Chicago's low series settling on O'Hare must NOT be paired with the Midway high market.
+    assert low_series_by_city(rows, stations) == {"New York": "KXLOWTNYC", "Miami": "KXLOWTMIA"}
