@@ -18,8 +18,14 @@ city-days already collected (city-days that hit an error are retried).
 No look-ahead: only the bulletin issued BEFORE the decision hour is used, and
 only candles that END at or before the decision hour.
 
-Usage:  python -m src.backtest --months 2025-03            (one month)
+Daily LOWS (added 2026-11-20): --kind low collects Kalshi's daily-low markets
+instead, using NBM's overnight-MINIMUM column (valid 12Z on the market date) and
+writing to data/backtest_low.db. Every low market's settlement station is read
+from Kalshi's own rules and must match the city's station, or the day is skipped.
+
+Usage:  python -m src.backtest --months 2025-03            (one month, daily highs)
         python -m src.backtest --months 2024-11..2025-04   (a range, oldest first)
+        python -m src.backtest --kind low --months 2025-11..2026-10
 """
 import argparse
 import json
@@ -36,12 +42,15 @@ import yaml
 from src import nbm
 from src.forecast_refresh import model_probability_for_market
 from src.kalshi_client import dollars_to_cents
+from src.list_kalshi_series import extract_cli_code, icao_from_cli
 from src.market_parsing import extract_threshold
 
 logger = logging.getLogger("backtest")
 
 AWS_BASE = "https://noaa-nbm-grib2-pds.s3.amazonaws.com"
 DEFAULT_DB = "data/backtest.db"
+DEFAULT_DBS = {"high": "data/backtest.db", "low": "data/backtest_low.db"}
+KINDS = ("high", "low")
 RUN_HOUR = 13            # NBM run used (published ~14-15Z)
 DECISION_HOUR = 19       # UTC hour the simulated decision is made, on the run date
 QUOTE_LOOKBACK_H = 6     # use the last quote within this many hours before the decision
@@ -86,6 +95,22 @@ CREATE TABLE IF NOT EXISTS bt_markets (
     expiration_value TEXT,              -- the actual high when Kalshi recorded it
     collected_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS bt_meta (
+    key TEXT PRIMARY KEY,               -- 'kind' = high | low
+    value TEXT
+);
+CREATE TABLE IF NOT EXISTS bt_skipped (
+    ticker TEXT PRIMARY KEY,            -- markets Kalshi returned that were NOT scored, and why
+    city TEXT NOT NULL,
+    market_date TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    result TEXT,
+    status TEXT,
+    strike_type TEXT,
+    floor_strike TEXT,
+    cap_strike TEXT,
+    raw_json TEXT                       -- the market as Kalshi returned it (trimmed)
+);
 """
 
 
@@ -119,6 +144,67 @@ def prefix_candidates(prefix: str) -> list[str]:
             seen.add(p)
             uniq.append(p)
     return uniq
+
+
+def low_prefix_candidates(city: dict) -> list[str]:
+    """Kalshi series names to try for a city's daily-LOW markets. An explicit
+    `kalshi_low_series_prefix` in config.yaml comes first; then names derived
+    from the daily-high prefix (KXHIGHNY -> KXLOWTNY, KXLOWTNYC, KXLOWNY ...).
+    Guesses are safe: every market's settlement station is checked before use."""
+    out = []
+    if city.get("kalshi_low_series_prefix"):
+        out.append(city["kalshi_low_series_prefix"])
+    hp = city["kalshi_series_prefix"].upper()
+    code = hp[len("KXHIGHT"):] if hp.startswith("KXHIGHT") else (
+        hp[len("KXHIGH"):] if hp.startswith("KXHIGH") else hp)
+    codes = [code] + (["NYC"] if code == "NY" else [])
+    for c in codes:
+        out += [f"KXLOWT{c}", f"KXLOW{c}"]
+    seen, uniq = set(), []
+    for p in out:
+        if p not in seen:
+            seen.add(p)
+            uniq.append(p)
+    return uniq
+
+
+def series_candidates(city: dict, kind: str) -> list[str]:
+    return prefix_candidates(city["kalshi_series_prefix"]) if kind == "high" else low_prefix_candidates(city)
+
+
+def settlement_station(market: dict) -> str | None:
+    """The ICAO station a market settles on, read from Kalshi's own rules text
+    (e.g. 'Data for CLINYC ...' -> KNYC). None if the rules don't name one."""
+    text = " ".join(str(market.get(k, "") or "") for k in
+                    ("rules_primary", "rules_secondary", "settlement_sources"))
+    return icao_from_cli(extract_cli_code(text))
+
+
+def get_min_temp_forecast(parsed: dict, run_id: str, market_date) -> dict | None:
+    """The percentile forecast for the overnight LOW of `market_date`: the TXN
+    column valid at 12Z ON the market date (NBM MinT window 00Z-18Z). Mirrors
+    nbm.get_max_temp_forecast, which uses 00Z the day after for the high."""
+    hours = parsed.get("forecast_hours")
+    if not hours or market_date is None:
+        return None
+    target = datetime(market_date.year, market_date.month, market_date.day, 12, tzinfo=timezone.utc)
+    for idx, fhr in enumerate(hours):
+        if nbm.valid_time_utc(run_id, fhr) != target:
+            continue
+        out = {}
+        for key in ("p10", "p25", "p50", "p75", "p90"):
+            values = parsed.get(key)
+            if not values or idx >= len(values) or values[idx] is None:
+                return None
+            out[key] = values[idx]
+        return {"values": out, "column_index": idx, "forecast_hour": fhr}
+    return None
+
+
+def forecast_for(kind: str, parsed: dict, run_id: str, market_date):
+    if kind == "low":
+        return get_min_temp_forecast(parsed, run_id, market_date)
+    return nbm.get_max_temp_forecast(parsed, run_id, market_date)
 
 
 def parse_months(spec: str) -> list[tuple[int, int]]:
@@ -258,9 +344,15 @@ class Sources:
 
 # --- collection --------------------------------------------------------------
 
-def open_db(path: str) -> sqlite3.Connection:
+def open_db(path: str, kind: str = "high") -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
+    row = conn.execute("SELECT value FROM bt_meta WHERE key='kind'").fetchone()
+    if row is None:
+        conn.execute("INSERT INTO bt_meta (key, value) VALUES ('kind', ?)", (kind,))
+        conn.commit()
+    elif row[0] != kind:
+        raise ValueError(f"{path} holds {row[0]} data; refusing to add {kind} data to it")
     return conn
 
 
@@ -282,30 +374,41 @@ def _mark(conn, city, market_date, status, detail="", prefix=None, run_id=None,
 def collect_city_day(conn, src: Sources, city: dict, is_shadow: bool, parsed: dict | None,
                      run_id: str, version: str | None, run_date: date, market_date: date,
                      sigma: float, decision_hour: int = DECISION_HOUR,
-                     prefix_hint: dict | None = None) -> str:
+                     prefix_hint: dict | None = None, kind: str = "high") -> str:
     name = city["name"]
     if parsed is None:
         _mark(conn, name, market_date, "no_forecast", "station not parsed", run_id=run_id,
               version=version)
         return "no_forecast"
-    chosen = nbm.get_max_temp_forecast(parsed, run_id, market_date)
+    chosen = forecast_for(kind, parsed, run_id, market_date)
     if chosen is None:
-        _mark(conn, name, market_date, "no_forecast", "no daily-high column", run_id=run_id,
+        _mark(conn, name, market_date, "no_forecast", f"no daily-{kind} column", run_id=run_id,
               version=version)
         return "no_forecast"
     pct = chosen["values"]
 
-    prefixes = prefix_candidates(city["kalshi_series_prefix"])
+    prefixes = series_candidates(city, kind)
     hint = (prefix_hint or {}).get(name)
     if hint in prefixes:
         prefixes = [hint] + [p for p in prefixes if p != hint]
-    markets, prefix = [], None
+    markets, prefix, wrong, verified = [], None, [], False
     for p in prefixes:
-        markets = src.markets(event_ticker(p, market_date))
-        if markets:
-            prefix = p
-            break
+        found = src.markets(event_ticker(p, market_date))
+        if not found:
+            continue
+        # The series must settle on the SAME station as the city (e.g. never pair a
+        # Midway high with an O'Hare low). Checked from Kalshi's own rules text.
+        stations = {settlement_station(m) for m in found} - {None}
+        if stations and stations != {city["expected_station"]}:
+            wrong.append(f"{p}->{','.join(sorted(stations))}")
+            continue
+        markets, prefix, verified = found, p, bool(stations)
+        break
     if not markets:
+        if wrong:
+            _mark(conn, name, market_date, "wrong_station", "; ".join(wrong), run_id=run_id,
+                  version=version)
+            return "wrong_station"
         _mark(conn, name, market_date, "no_markets", "tried " + ",".join(prefixes),
               run_id=run_id, version=version)
         return "no_markets"
@@ -321,12 +424,29 @@ def collect_city_day(conn, src: Sources, city: dict, is_shadow: bool, parsed: di
         ticker = m.get("ticker")
         result = m.get("result")
         threshold = extract_threshold(m)
-        if not ticker or threshold is None or result not in ("yes", "no"):
-            continue
-        try:
-            probs = model_probability_for_market(threshold, pct, sigma)
-        except (ValueError, RuntimeError) as e:
-            logger.warning("probability failed %s: %s", ticker, e)
+        reason = None
+        if not ticker:
+            reason = "no ticker"
+        elif threshold is None:
+            reason = "unreadable strike"
+        elif result not in ("yes", "no"):
+            reason = f"result={result!r}"
+        if reason is None:
+            try:
+                probs = model_probability_for_market(threshold, pct, sigma)
+            except (ValueError, RuntimeError) as e:
+                reason = f"probability failed: {e}"
+        if reason is not None:
+            # Never drop a market silently: a skipped WINNER makes a whole day look
+            # like "everything lost" (found in Run 1: Jan 16 - Feb 9 2025).
+            logger.warning("skipped %s: %s", ticker, reason)
+            conn.execute(
+                "INSERT OR REPLACE INTO bt_skipped (ticker, city, market_date, reason, result,"
+                " status, strike_type, floor_strike, cap_strike, raw_json)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (ticker or f"?{name}{market_date}", name, market_date.isoformat(), reason[:200],
+                 str(result), str(m.get("status")), str(m.get("strike_type")),
+                 str(m.get("floor_strike")), str(m.get("cap_strike")), json.dumps(m)[:2000]))
             continue
         candles = src.candles(prefix, ticker, start_ts, decision_ts)
         q = quote_at_decision(candles, decision_ts)
@@ -345,15 +465,16 @@ def collect_city_day(conn, src: Sources, city: dict, is_shadow: bool, parsed: di
              volume_before(candles, decision_ts), result,
              str(m.get("expiration_value") or "") or None, now))
         n += 1
-    _mark(conn, name, market_date, "ok", "", prefix, run_id, version, n)
+    _mark(conn, name, market_date, "ok", "" if verified else "station not named in rules",
+          prefix, run_id, version, n)
     return "ok"
 
 
 def collect_month(conn, src: Sources, cities: list[tuple[dict, bool]], year: int, month: int,
                   sigma: float, run_hour: int = RUN_HOUR, decision_hour: int = DECISION_HOUR,
-                  redo: bool = False) -> dict:
+                  redo: bool = False, kind: str = "high") -> dict:
     counts = {"ok": 0, "no_markets": 0, "no_forecast": 0, "error": 0, "skipped": 0,
-              "no_bulletin": 0}
+              "no_bulletin": 0, "wrong_station": 0}
     prefix_hint = {}
     for run_date in days_in_month(year, month):
         market_date = run_date + timedelta(days=1)
@@ -402,7 +523,7 @@ def collect_month(conn, src: Sources, cities: list[tuple[dict, bool]], year: int
             try:
                 status = collect_city_day(conn, src, c, is_shadow, parsed_by_city.get(c["name"]),
                                           run_id, version, run_date, market_date, sigma,
-                                          decision_hour, prefix_hint)
+                                          decision_hour, prefix_hint, kind)
             except Exception as e:      # one bad city-day never stops the month
                 logger.exception("city-day failed %s %s", c["name"], market_date)
                 _mark(conn, c["name"], market_date, "error", f"{type(e).__name__}: {e}",
@@ -425,7 +546,8 @@ def load_cities(config_path: str = "config.yaml") -> tuple[list[tuple[dict, bool
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", required=True, help="e.g. 2025-03 or 2024-11..2025-04")
-    ap.add_argument("--db", default=DEFAULT_DB)
+    ap.add_argument("--kind", choices=KINDS, default="high", help="daily high or daily low markets")
+    ap.add_argument("--db", default=None, help="defaults to data/backtest.db (high) or data/backtest_low.db (low)")
     ap.add_argument("--redo", action="store_true", help="re-collect city-days already stored")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -433,10 +555,10 @@ def main(argv=None):
     from src.scan_common import build_client
     cities, sigma = load_cities()
     src = Sources(build_client())
-    conn = open_db(args.db)
+    conn = open_db(args.db or DEFAULT_DBS[args.kind], args.kind)
     for y, m in parse_months(args.months):
         started = time.time()
-        counts = collect_month(conn, src, cities, y, m, sigma, redo=args.redo)
+        counts = collect_month(conn, src, cities, y, m, sigma, redo=args.redo, kind=args.kind)
         print(f"{y}-{m:02d}: {counts}  ({time.time() - started:.0f}s)", flush=True)
     conn.close()
     return 0

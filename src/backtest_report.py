@@ -15,7 +15,10 @@ Ground rules (fixed BEFORE any results were seen - see claude/backtest-plan.md):
     simulated - historical candles carry no depth - so the simulation trades a
     little more often than the live bot would.
 
-Usage: python -m src.backtest_report [--db data/backtest.db] [--holdout-from 2026-08-01]
+Works for daily-high (data/backtest.db) and daily-low (data/backtest_low.db)
+databases; the kind is read from the database itself.
+
+Usage: python -m src.backtest_report [--kind high|low] [--db PATH] [--holdout-from 2026-08-01]
 """
 import argparse
 import json
@@ -68,6 +71,23 @@ def simulate_bet(r: dict, min_gap: float, min_yes_cents: int, min_volume: int,
     won = r["outcome"] == side
     return {"side": side, "price": price, "fee": fee, "won": won,
             "pnl": (100 if won else 0) - price - fee, "gap": abs(gap)}
+
+
+def complete_days_only(rows: list[dict]) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Keep only city-days with exactly one winning market. Every day's ladder of
+    markets has exactly one winner; if it's missing (Run 1: Jan 16 - Feb 9 2025,
+    all cities), every remaining market lost and the day scores as a free NO win."""
+    by_day = defaultdict(list)
+    for r in rows:
+        by_day[(r["city"], r["market_date"])].append(r)
+    keep, bad = [], []
+    for k, rs in by_day.items():
+        if sum(r["outcome"] == "yes" for r in rs) == 1:
+            keep += rs
+        else:
+            bad.append(k)
+    keep.sort(key=lambda r: (r["market_date"], r["ticker"]))
+    return keep, sorted(bad)
 
 
 def brier(pairs) -> float | None:
@@ -137,8 +157,9 @@ def scorecard(out, rows, label_fn, title, order=None):
         o = lambda r: 1.0 if r["outcome"] == "yes" else 0.0
         bm = brier((r["model_prob"], o(r)) for r in q)
         ba = brier((r["yes_ask_cents"] / 100, o(r)) for r in q)
-        mid = [r for r in q if r["yes_bid_cents"]]
-        bmid = brier(((r["yes_ask_cents"] + r["yes_bid_cents"]) / 200, o(r)) for r in mid)
+        # Midpoint on the SAME markets as the ask (no bid = a 0c bid). Run 1 scored the
+        # midpoint only where a bid existed, which made it look worse than the ask.
+        bmid = brier(((r["yes_ask_cents"] + (r["yes_bid_cents"] or 0)) / 200, o(r)) for r in q)
         # Day-level paired difference (market minus model): t > 2 means the model is reliably better.
         by_day = defaultdict(list)
         for r in q:
@@ -193,12 +214,27 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    rows = [dict(r) for r in conn.execute("SELECT * FROM bt_markets ORDER BY market_date, ticker")]
+    all_rows = [dict(r) for r in conn.execute("SELECT * FROM bt_markets ORDER BY market_date, ticker")]
     days = [dict(r) for r in conn.execute("SELECT * FROM bt_city_days")]
+    rows, incomplete = complete_days_only(all_rows)
+    try:
+        skipped = [dict(r) for r in conn.execute("SELECT * FROM bt_skipped")]
+    except sqlite3.OperationalError:      # databases from before the table existed
+        skipped = []
     out = Report()
-    out(f"=== Weather Bot backtest report — {datetime.now(timezone.utc):%Y-%m-%d %H:%MZ} ===")
+    try:
+        kind = (conn.execute("SELECT value FROM bt_meta WHERE key='kind'").fetchone() or ["high"])[0]
+    except sqlite3.OperationalError:     # databases from before bt_meta existed are highs
+        kind = "high"
+    out(f"=== Weather Bot backtest report — DAILY {kind.upper()}S — "
+        f"{datetime.now(timezone.utc):%Y-%m-%d %H:%MZ} ===")
+    if kind == "low":
+        out("Forecast = NBM overnight-minimum column (valid 12Z on the market date; NBM's MinT window is "
+            "00Z-18Z). Kalshi settles on the calendar-day low (midnight-midnight local standard time), "
+            "so lows set late in the evening are outside NBM's window.")
     if not rows:
-        out("No markets collected yet. Run the 'Run Backtest' workflow first.")
+        out("No markets collected yet. Run the 'Run Backtest' workflow first."
+            if not all_rows else "No complete city-days yet (see incomplete-day note).")
         return out.text()
 
     months = sorted({r["market_date"][:7] for r in rows})
@@ -215,7 +251,7 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
 
     # 1. Coverage
     out("\n1. COVERAGE (city-days)")
-    out(f"  {'city':14s} {'ok':>4s} {'no mkts':>7s} {'no fcst':>7s} {'error':>5s}  "
+    out(f"  {'city':14s} {'ok':>4s} {'no mkts':>7s} {'no fcst':>7s} {'wrong stn':>9s} {'error':>5s}  "
         f"{'first ok':10s} {'last ok':10s} {'quoted':>6s}  series")
     for c in city_order:
         ds = [d for d in days if d["city"] == c]
@@ -226,16 +262,37 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
         out(f"  {c + (' *' if c in shadow else ''):14s} {len(ok):4d} "
             f"{sum(d['status'] == 'no_markets' for d in ds):7d} "
             f"{sum(d['status'] == 'no_forecast' for d in ds):7d} "
+            f"{sum(d['status'] == 'wrong_station' for d in ds):9d} "
             f"{sum(d['status'] == 'error' for d in ds):5d}  "
             f"{(ok[0] if ok else '-'):10s} {(ok[-1] if ok else '-'):10s} "
             f"{(100 * quoted / len(cr) if cr else 0):5.0f}%  {','.join(pref)}")
     out("  * = shadow city (never traded live). 'quoted' = markets with a YES ask at the decision hour.")
+    out("  'wrong stn' = Kalshi's rules named a different settlement station than the city's; "
+        "those days are never scored.")
+    unverified = sum(1 for d in days if d["status"] == "ok" and "not named" in (d["detail"] or ""))
+    if unverified:
+        out(f"  {unverified} scored city-days had rules that didn't name a station (not verified).")
+    wrong = [d for d in days if d["status"] == "wrong_station"]
+    if wrong:
+        out(f"    e.g. {wrong[0]['city']} {wrong[0]['market_date']}: {wrong[0]['detail'][:120]}")
     versions = defaultdict(list)
     for d in days:
         if d["nbm_version"]:
             versions[d["nbm_version"]].append(d["market_date"])
     for v, ds in sorted(versions.items()):
         out(f"  NBM V{v}: market dates {min(ds)} to {max(ds)}")
+    if incomplete:
+        dates = sorted(d for _, d in incomplete)
+        out(f"  EXCLUDED: {len(incomplete)} city-days without exactly one winning market "
+            f"({dates[0]} to {dates[-1]}). A missing winner would make every bet look like a "
+            "NO win, so these days are left out of everything below.")
+    if skipped:
+        reasons = defaultdict(int)
+        for k in skipped:
+            reasons[k["reason"].split(":")[0]] += 1
+        out(f"  Markets Kalshi returned but not scored: {len(skipped)} - "
+            + ", ".join(f"{r} x{n}" for r, n in sorted(reasons.items(), key=lambda x: -x[1])[:5]))
+        out(f"    example: {skipped[0]['ticker']} {skipped[0]['raw_json'][:300]}")
     errs = [d for d in days if d["status"] == "error"]
     if errs:
         out(f"  {len(errs)} city-days hit errors (re-running the same months retries them); "
@@ -273,7 +330,7 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
               "v6.3 rules by year (live cities):", base_rules)
 
     # 4. Forecast accuracy and bias by month
-    out("\n4. FORECAST ACCURACY — actual high minus NBM median (°F), monthly average")
+    out(f"\n4. FORECAST ACCURACY — actual {kind} minus NBM median (°F), monthly average")
     by_cd = defaultdict(list)
     for r in rows:
         by_cd[(r["city"], r["market_date"])].append(r)
@@ -303,7 +360,7 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
     out("  " + f"{'in range':8s}" + "".join(
         f"{100 * sum(cover[c]) / len(cover[c]):6.0f}%" if cover[c] else f"{'':>7s}"
         for c in city_order) + "   (actual within P10-P90; target 80%)")
-    out(f"  Actual high = Kalshi's recorded value, else the winning bracket's midpoint; "
+    out(f"  Actual {kind} = Kalshi's recorded value, else the winning bracket's midpoint; "
         f"{censored} city-days settled in an open-ended tail were left out.")
     out("  Look for a sudden lasting jump in one column (e.g. a 2025 sensor replacement).")
 
@@ -344,17 +401,21 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default="data/backtest.db")
+    ap.add_argument("--kind", choices=("high", "low"), default="high")
+    ap.add_argument("--db", default=None, help="defaults to data/backtest.db or data/backtest_low.db")
     ap.add_argument("--holdout-from", default=HOLDOUT_FROM)
     ap.add_argument("--out-dir", default="data/backtest_reports")
     args = ap.parse_args(argv)
-    if not os.path.exists(args.db):
-        print(f"{args.db} not found - run the backtest first.")
+    db_path = args.db or {"high": "data/backtest.db", "low": "data/backtest_low.db"}[args.kind]
+    if not os.path.exists(db_path):
+        print(f"{db_path} not found - run the backtest first.")
         return 0
-    text = build_report(args.db, holdout_from=args.holdout_from)
+    text = build_report(db_path, holdout_from=args.holdout_from)
     print(text)
     os.makedirs(args.out_dir, exist_ok=True)
-    path = os.path.join(args.out_dir, f"backtest_report_{datetime.now(timezone.utc):%Y-%m-%dT%H%MZ}.txt")
+    suffix = "" if args.kind == "high" else "_low"
+    path = os.path.join(args.out_dir,
+                        f"backtest_report{suffix}_{datetime.now(timezone.utc):%Y-%m-%dT%H%MZ}.txt")
     with open(path, "w") as f:
         f.write(text)
     print(f"(saved to {path})")
