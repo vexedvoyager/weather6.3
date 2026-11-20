@@ -8,6 +8,7 @@ name: Run Backtest
 # left off.
 #
 # Runs about 10 minutes per month. Do up to ~12 months per run.
+# Pick "low" under kind for Kalshi's daily-LOW markets (saved to data/backtest_low.db).
 # When it finishes, download the "backtest-report" artifact and upload it to Claude.
 on:
   workflow_dispatch:
@@ -16,6 +17,16 @@ on:
         description: "Months to collect, e.g. 2025-03 or 2024-11..2025-10 (leave empty to only rebuild the report)"
         required: false
         default: ""
+      kind:
+        description: "Daily high or daily low markets"
+        type: choice
+        options: [high, low]
+        default: high
+      redo:
+        description: "Re-collect days already stored (use only when asked to)"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: backtest-db-writer      # one backtest at a time; never blocks Price Check
@@ -43,11 +54,14 @@ jobs:
           KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
           KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
           MONTHS: ${{ github.event.inputs.months }}
+          REDO: ${{ github.event.inputs.redo }}
+          KIND: ${{ github.event.inputs.kind }}
         run: |
           git config user.name "predict-weather-bot"
           git config user.email "actions@github.com"
+          DB=data/backtest.db; [ "$KIND" = "low" ] && DB=data/backtest_low.db
           save() {
-            git add data/backtest.db
+            git add "$DB"
             git diff --quiet --cached && return 0
             git commit -m "$1"
             # Price Check pushes every 5 minutes; rebase onto it and retry.
@@ -60,21 +74,27 @@ jobs:
           }
           for m in $(python -c "from src.backtest import parse_months; import os; print(' '.join(f'{y}-{mo:02d}' for y, mo in parse_months(os.environ['MONTHS'])))"); do
             echo "::group::Month $m"
-            python -m src.backtest --months "$m"
+            if [ "$REDO" = "true" ]; then
+              python -m src.backtest --kind "$KIND" --months "$m" --redo
+            else
+              python -m src.backtest --kind "$KIND" --months "$m"
+            fi
             echo "::endgroup::"
             save "Backtest data $m"
           done
 
       - name: Build report
         if: always()
-        run: python -m src.backtest_report | tee backtest_report.txt
+        env:
+          KIND: ${{ github.event.inputs.kind }}
+        run: python -m src.backtest_report --kind "${KIND:-high}" | tee backtest_report.txt
 
       - name: Save report to repo
         if: always()
         run: |
           git config user.name "predict-weather-bot"
           git config user.email "actions@github.com"
-          git add data/backtest_reports/ data/backtest.db 2>/dev/null || true
+          git add data/backtest_reports/ data/backtest.db data/backtest_low.db 2>/dev/null || true
           git diff --quiet --cached && exit 0
           git commit -m "Backtest report $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           for i in 1 2 3 4 5 6; do
@@ -87,8 +107,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backtest-report
+          name: backtest-report-${{ github.event.inputs.kind || 'high' }}
           path: |
             backtest_report.txt
             data/backtest.db
+            data/backtest_low.db
           if-no-files-found: ignore
