@@ -44,6 +44,23 @@ def is_daily_high_series(series: dict) -> bool:
     return str(series.get("ticker", "")).upper().startswith("KXHIGH")
 
 
+def is_daily_low_series(series: dict) -> bool:
+    """Daily LOW-temperature series use tickers like KXLOWTNYC (added 2026-11-19 for
+    the daily-lows backtest; see "claude/backtest-plan.md" in the Claude project)."""
+    return str(series.get("ticker", "")).upper().startswith("KXLOW")
+
+
+def low_series_by_city(rows: list, station_to_city: dict) -> dict:
+    """{city: low series} for low series that settle on the SAME station as a
+    configured city's daily-high market - the only ones the backtest should pair."""
+    out = {}
+    for r in rows:
+        city = station_to_city.get(r.get("icao"))
+        if city and city not in out:
+            out[city] = r["series"]
+    return out
+
+
 def inspect_series(client, series: dict, bulletin_text: str, configured: dict) -> dict:
     """Returns one row of facts about a series (never raises)."""
     ticker = series.get("ticker", "?")
@@ -141,6 +158,25 @@ def main():
 
     rows = [inspect_series(client, s, bulletin_text, configured) for s in highs]
     print("\n".join(format_rows(rows)))
+
+    # --- Daily LOW series (for the lows backtest) -------------------------------
+    lows = sorted((s for s in all_series if is_daily_low_series(s)), key=lambda s: s.get("ticker", ""))
+    print(f"\nDaily-low series (ticker starts with KXLOW): {len(lows)}")
+    if lows:
+        station_to_city = {c["expected_station"]: c["name"] for c in
+                           list(cfg["cities"]) + list(cfg.get("shadow_cities") or [])}
+        low_rows = [inspect_series(client, s, bulletin_text, {}) for s in lows]
+        for r in low_rows:
+            city = station_to_city.get(r["icao"])
+            r["configured_as"] = (city + " (same stn)") if city else None
+        print("\n".join(format_rows(low_rows)))
+        mapping = low_series_by_city(low_rows, station_to_city)
+        print("\nLow series that settle on the same station as a configured city:")
+        for city, series in mapping.items():
+            print(f'  {city}: "{series}"')
+        missing = [c for c in station_to_city.values() if c not in mapping]
+        if missing:
+            print(f"  (no matching low series found for: {', '.join(missing)})")
 
     snippet = candidate_snippet(rows)
     print("\nViable, not-yet-configured candidates (paste under shadow_cities in config.yaml; "
