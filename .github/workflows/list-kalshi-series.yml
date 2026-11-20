@@ -1,6 +1,6 @@
 name: List Kalshi Series
 
-# Manual only. Lists the daily-high temperature series Kalshi offers, with
+# Manual only. Lists the daily-high (and, since 2026-11-19, daily-low) temperature series Kalshi offers, with
 # each one's settlement station and whether NBM can forecast it (v6.0,
 # IMPROVEMENTS.md item #23). Read-only. Output is also saved as a
 # downloadable file ("kalshi-series-list" artifact); upload it to Claude.
