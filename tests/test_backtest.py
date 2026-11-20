@@ -249,3 +249,38 @@ def test_holdout_is_fixed_by_date_not_by_how_much_was_collected(collected):
     *_, db_path = collected
     assert "HOLDOUT — 2026-10" in build_report(str(db_path), holdout_from="2026-08-01")
     assert "none collected yet" in build_report(str(db_path), holdout_from="2026-11-01")
+
+
+def test_markets_that_cannot_be_scored_are_logged_with_the_reason(tmp_path):
+    client = FakeClient()
+    winner = next(m for m in client.events["KXHIGHCHI-26OCT22"] if m["ticker"].endswith("B70.5"))
+    winner["result"] = "all_yes"                     # an unexpected result value
+    conn = bt.open_db(str(tmp_path / "bt.db"))
+    bt.collect_month(conn, bt.Sources(client, http_get=_fake_get, pause_s=0), CITIES[:1],
+                     2026, 10, sigma=1.15, run_hour=19)
+    row = conn.execute("SELECT ticker, reason FROM bt_skipped").fetchone()
+    assert row == ("KXHIGHCHI-26OCT22-B70.5", "result='all_yes'")
+    assert conn.execute("SELECT COUNT(*) FROM bt_markets").fetchone()[0] == 5
+
+
+def test_report_drops_days_whose_winner_is_missing(tmp_path):
+    from src.backtest_report import complete_days_only
+    day = [dict(city="NY", market_date="2025-01-20", ticker=f"T{i}", outcome="no") for i in range(5)]
+    ok = [dict(city="NY", market_date="2025-01-21", ticker=f"T{i}", outcome="yes" if i == 2 else "no")
+          for i in range(6)]
+    keep, bad = complete_days_only(day + ok)
+    assert len(keep) == 6 and bad == [("NY", "2025-01-20")]
+
+
+def test_midpoint_is_scored_on_the_same_markets_as_the_ask(tmp_path):
+    from src.backtest_report import scorecard, Report
+    rows = [dict(city="NY", market_date="2025-01-21", outcome="no", model_prob=0.02,
+                 yes_ask_cents=4, yes_bid_cents=0),
+            dict(city="NY", market_date="2025-01-21", outcome="yes", model_prob=0.6,
+                 yes_ask_cents=62, yes_bid_cents=58)]
+    out = Report()
+    scorecard(out, rows, lambda r: r["city"], "t")
+    line = out.lines[-1].split()
+    ask, mid = float(line[4]), float(line[5])
+    expected_mid = ((0.02 - 0) ** 2 + (0.60 - 1) ** 2) / 2
+    assert abs(mid - round(expected_mid, 3)) < 1e-3 and ask != mid
