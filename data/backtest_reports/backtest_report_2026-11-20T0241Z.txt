@@ -1,0 +1,232 @@
+=== Weather Bot backtest report — 2026-11-20 02:41Z ===
+Markets: 37,461 from 2024-11 to 2026-11  |  development: 30,207  |  HOLDOUT (2026-08, 2026-09, 2026-10, 2026-11): 7,254
+Rules simulated: v6.3 = gap >= 15 pts vs YES ask, YES ask >= 11c, 24h volume >= 10; v6.4 = v6.3 + no YES on above/below markets.
+Not simulated: the composite-score (order-book) filter. Brier: lower is better. 'day t' > +2 means the model beat the market reliably; < -2 the reverse.
+
+1. COVERAGE (city-days)
+  city             ok no mkts no fcst error  first ok   last ok    quoted  series
+  Chicago         730       0       0     0  2024-11-02 2026-11-01    99%  KXHIGHCHI
+  New York        730       0       0     0  2024-11-02 2026-11-01    99%  KXHIGHNY
+  Miami           730       0       0     0  2024-11-02 2026-11-01    99%  KXHIGHMIA
+  Austin          730       0       0     0  2024-11-02 2026-11-01    99%  KXHIGHAUS
+  Los Angeles     666      64       0     0  2025-01-05 2026-11-01    99%  KXHIGHLAX
+  Denver *        712      18       0     0  2024-11-20 2026-11-01    99%  KXHIGHDEN
+  Phoenix *       271     459       0     0  2026-02-04 2026-11-01    99%  KXHIGHTPHX
+  Seattle *       292     438       0     0  2026-01-14 2026-11-01   100%  KXHIGHTSEA
+  Atlanta *       271     459       0     0  2026-02-04 2026-11-01   100%  KXHIGHTATL
+  Dallas *        264     466       0     0  2026-02-11 2026-11-01    99%  KXHIGHTDAL
+  Houston *       334     396       0     0  2024-11-20 2026-11-01    98%  KXHIGHHOU,KXHIGHTHOU
+  Boston *        270     460       0     0  2026-02-05 2026-11-01   100%  KXHIGHTBOS
+  Minneapolis *   271     459       0     0  2026-02-04 2026-11-01    99%  KXHIGHTMIN
+  * = shadow city (never traded live). 'quoted' = markets with a YES ask at the decision hour.
+  NBM V4.2: market dates 2024-11-02 to 2025-05-27
+  NBM V4.3: market dates 2025-05-28 to 2026-05-04
+  NBM V5.0: market dates 2026-05-05 to 2026-11-01
+
+2. MODEL VS MARKET — DEVELOPMENT PERIOD
+
+By city:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  Chicago                     3766   632  0.136   0.118   0.130  market     -8.3
+  New York                    3767   632  0.135   0.115   0.128  market     -9.2
+  Miami                       3765   632  0.103   0.101   0.124  market     -1.0
+  Austin                      3767   632  0.126   0.121   0.129  market     -2.8
+  Los Angeles                 3382   568  0.134   0.111   0.125  market     -8.8
+  Denver                      3653   613  0.133   0.119   0.126  market     -6.9
+  Phoenix                     1059   177  0.109   0.104   0.109  market     -1.7
+  Seattle                     1188   198  0.124   0.119   0.120  market     -1.3
+  Atlanta                     1062   177  0.125   0.122   0.125  market     -1.0
+  Dallas                      1018   170  0.129   0.118   0.124  market     -3.6
+  Houston                     1399   236  0.114   0.108   0.122  market     -1.8
+  Boston                      1061   177  0.142   0.123   0.124  market     -4.1
+  Minneapolis                 1059   177  0.133   0.118   0.121  market     -5.1
+
+Overall:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  ALL (excl Seattle)         28758  4823  0.127   0.114   0.125  market    -16.9
+
+By NBM version:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  V4.2                        7079  1207  0.121   0.113   0.132  market     -4.4
+  V4.3                       16003  2670  0.132   0.116   0.124  market    -15.0
+  V5.0                        6864  1144  0.123   0.112   0.122  market     -8.5
+
+By season:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  DJF                         7370  1258  0.126   0.113   0.120  market     -8.4
+  MAM                        10486  1748  0.129   0.114   0.123  market    -12.4
+  JJA                         8070  1345  0.123   0.114   0.130  market     -7.4
+  SON                         4020   670  0.132   0.121   0.134  market     -4.7
+
+By year:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  2024                        1932   322  0.130   0.132   0.142  MODEL      +0.5
+  2025                       12923  2181  0.126   0.112   0.131  market    -12.2
+  2026                       15091  2518  0.128   0.114   0.119  market    -13.6
+
+3. SIMULATED TRADING — DEVELOPMENT PERIOD (one contract per bet, after fees)
+
+v6.3 rules, live cities:
+                          bets   won mkt exp      P&L  per bet     z
+  Chicago                  687   408   417.0   -21.66    -3.2c  -0.8
+  New York                 842   488   478.1    -5.49    -0.7c  +0.8
+  Miami                    491   286   256.8   +20.09    +4.1c  +2.9
+  Austin                   608   383   368.0    +3.73    +0.6c  +1.4
+  Los Angeles              769   391   415.3   -38.36    -5.0c  -2.0
+  TOTAL                   3397  1956  1935.2   -41.69    -1.2c  +0.8
+
+v6.4 rules (no YES on above/below), live cities minus Austin:
+                          bets   won mkt exp      P&L  per bet     z
+  Chicago                  624   395   402.2   -18.80    -3.0c  -0.6
+  New York                 776   471   463.0    -6.41    -0.8c  +0.6
+  Miami                    474   280   254.0   +17.12    +3.6c  +2.6
+  Los Angeles              733   383   407.3   -37.76    -5.2c  -2.0
+  TOTAL                   2607  1529  1526.4   -45.85    -1.8c  +0.1
+
+v6.3 rules, shadow cities (never traded live):
+                          bets   won mkt exp      P&L  per bet     z
+  Denver                   632   376   377.6   -13.01    -2.1c  -0.1
+  Phoenix                  128    67    62.9    +1.69    +1.3c  +0.8
+  Seattle                  119    70    63.4    +4.38    +3.7c  +1.3
+  Atlanta                  110    74    62.0    +9.89    +9.0c  +2.5
+  Dallas                   159    97    87.6    +6.49    +4.1c  +1.7
+  Houston                  200   113   105.8    +3.46    +1.7c  +1.1
+  Boston                   191    93    98.7    -9.19    -4.8c  -0.9
+  Minneapolis              139    79    81.4    -5.04    -3.6c  -0.4
+  TOTAL                   1678   969   939.3    -1.33    -0.1c  +1.6
+
+v6.3 rules by bet type (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  NO bracket              2276  1541  1517.6   -20.53    -0.9c  +1.1
+  NO threshold             358   225   235.4   -16.85    -4.7c  -1.3
+  YES bracket              538   138   133.4    -4.24    -0.8c  +0.5
+  YES threshold            225    52    48.8    -0.07    -0.0c  +0.6
+  TOTAL                   3397  1956  1935.2   -41.69    -1.2c  +0.8
+
+v6.3 rules by edge size (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  15-25 pts               2278  1352  1345.3   -35.00    -1.5c  +0.3
+  25-40 pts                936   542   519.8    +4.45    +0.5c  +1.6
+  40+ pts                  183    62    70.1   -11.14    -6.1c  -1.4
+  TOTAL                   3397  1956  1935.2   -41.69    -1.2c  +0.8
+
+v6.3 rules by side and price (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  NO 31-60c                707   366   379.2   -27.33    -3.9c  -1.0
+  NO <=30c                  24     3     4.7    -2.10    -8.8c  -0.9
+  NO >60c                 1903  1397  1369.1    -7.95    -0.4c  +1.4
+  YES 31-60c               181    83    73.2    +6.14    +3.4c  +1.5
+  YES <=30c                574    99   103.6   -13.00    -2.3c  -0.5
+  YES >60c                   8     8     5.3    +2.55   +31.9c  +2.0
+  TOTAL                   3397  1956  1935.2   -41.69    -1.2c  +0.8
+
+v6.3 rules by year (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  2024                     322   197   186.9    +4.14    +1.3c  +1.2
+  2025                    1944  1165  1147.1   -17.91    -0.9c  +0.9
+  2026                    1131   594   601.2   -27.92    -2.5c  -0.5
+  TOTAL                   3397  1956  1935.2   -41.69    -1.2c  +0.8
+
+4. FORECAST ACCURACY — actual high minus NBM median (°F), monthly average
+  month     Chica  NewYo  Miami  Austi  LosAn  Denve  Phoen  Seatt  Atlan  Dalla  Houst  Bosto  Minne
+  2024-11    +1.1   +1.7   +0.5   +0.4          +3.5                               +0.5              
+  2024-12    +2.8   +2.2   +0.1   +0.8          +2.7                               +1.0              
+  2025-01    +2.8   +1.4   +0.1   +2.6   +2.4   +2.7                               +1.6              
+  2025-02    +2.7   +0.3   -0.3   -3.9   -0.9   -0.7                                                 
+  2025-03    -0.3   -0.2   -0.2   -0.2   -1.0   -2.3                                                 
+  2025-04    -0.7   +0.3   -0.3   -0.8   -0.2   -1.9                                                 
+  2025-05    -0.7   -2.5   +0.3   -0.4   -1.0   -1.7                                                 
+  2025-06    -2.6   -3.4   -0.0   +0.9   -0.2   -2.0                                                 
+  2025-07    -1.8   -0.8   +0.4   -1.7   +0.1   -0.1                                                 
+  2025-08    -1.1   -0.1   +0.2   +0.9   +1.1   -0.2                                                 
+  2025-09    +1.0   +0.6   +0.6   +1.2   +0.7   -1.4                                                 
+  2025-10    +0.6   +1.2   -0.3   +0.9   +1.0   +1.1                                                 
+  2025-11    +2.0   +1.9   +0.1   +0.9   +2.8   +2.5                                                 
+  2025-12    +2.4   +1.5   -0.1   +1.0   +0.8   +3.9                                                 
+  2026-01    +3.1   +2.4   -0.3   +1.9   +1.5   +0.3          +0.2                                   
+  2026-02    +1.4   +3.3   +0.6   -0.8   -0.0   -1.9   -0.2   +0.3   +0.7   -1.1   -0.8   +1.5   +0.3
+  2026-03    +0.5   +0.4   -0.4   -0.7   -4.8   -1.9   -0.3   +0.4   +0.4   -2.0   -1.1   +0.9   +0.6
+  2026-04    -1.9   -2.4   -0.1   -1.3   +1.1   -1.9   -0.4   -0.5   -1.2   -0.9   -0.9   -3.1   -1.7
+  2026-05    -0.8   -1.6   +0.3   -1.1   -0.5   +1.0   -0.1   -1.3   +0.4   +0.9   +0.1   +1.0   -1.0
+  2026-06    -0.9   -1.4   +0.3   -0.2   +0.1   -1.0   -0.6   +0.2   +0.0   -0.5   -0.2   -1.8   -0.4
+  2026-07    -1.1   -0.2   -0.4   +0.3   +0.9   +0.5   -0.5   -0.5   -0.1   +0.1   -0.6   -2.3   -0.7
+  2026-08    +0.6   -0.5   -0.4   +0.5   +0.8   -0.4   -0.3   -0.6   +0.1   +0.5   -0.4   -0.2   +0.5   HOLDOUT
+  2026-09    +0.5   -0.6   -0.0   -0.1   +1.2   -0.3   -0.1   -0.7   -1.3   -0.2   +0.2   -0.0   -0.3   HOLDOUT
+  2026-10    +0.8   +0.5   -0.2   -0.7   +1.6   -0.4   +0.5   -0.2   +0.5   +0.3   -0.4   +2.2   +1.2   HOLDOUT
+  2026-11    -5.0   -1.0   -1.0   +1.0   +0.0   +1.0   +0.0   -7.0   +0.0   -3.0   +4.0   +2.0   +3.0   HOLDOUT
+  typical     2.5    2.4    1.2    2.2    2.3    2.5    1.3    1.8    1.9    1.8    1.7    2.9    2.4   (mean absolute miss)
+  in range    81%    79%    93%    87%    69%    82%    94%    88%    90%    90%    89%    75%    82%   (actual within P10-P90; target 80%)
+  Actual high = Kalshi's recorded value, else the winning bracket's midpoint; 59 city-days settled in an open-ended tail were left out.
+  Look for a sudden lasting jump in one column (e.g. a 2025 sensor replacement).
+
+5. NEW YORK DETAIL — DEVELOPMENT PERIOD
+
+By season:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  DJF                         1037   177  0.135   0.111   0.119  market     -5.6
+  MAM                         1104   184  0.138   0.119   0.131  market     -4.8
+  JJA                          918   153  0.128   0.112   0.130  market     -4.6
+  SON                          708   118  0.137   0.117   0.132  market     -3.4
+
+By NBM version:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  V4.2                        1199   204  0.131   0.117   0.133  market     -3.6
+  V4.3                        2040   340  0.141   0.115   0.127  market     -8.6
+  V5.0                         528    88  0.119   0.109   0.121  market     -2.0
+
+By distance of the strike from the forecast median:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  bracket far (>5F)            335   235  0.101   0.087   0.098  market     -2.1
+  bracket near (<=2F)         1087   600  0.193   0.176   0.176  market     -4.3
+  bracket shoulder (2-5F)     1085   625  0.157   0.136   0.144  market     -4.3
+  threshold far (>5F)          243   236  0.040   0.028   0.034  market     -1.4
+  threshold near (<=2F)        404   404  0.128   0.074   0.083  market     -7.7
+  threshold shoulder (2-5F)     613   411  0.052   0.044   0.052  market     -2.3
+
+Simulated v6.3 bets by type:
+                          bets   won mkt exp      P&L  per bet     z
+  NO bracket               602   405   397.8    -4.42    -0.7c  +0.6
+  NO threshold              70    49    45.1    +2.65    +3.8c  +1.1
+  YES bracket              104    17    20.1    -4.64    -4.5c  -0.8
+  YES threshold             66    17    15.1    +0.92    +1.4c  +0.6
+  TOTAL                    842   488   478.1    -5.49    -0.7c  +0.8
+
+6. HOLDOUT — 2026-08, 2026-09, 2026-10, 2026-11
+  Read this LAST. If the development-period story holds here too, it's more likely real.
+
+By city:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  Chicago                      558    93  0.132   0.108   0.112  market     -5.1
+  New York                     558    93  0.115   0.093   0.114  market     -4.0
+  Miami                        558    93  0.113   0.096   0.106  market     -3.8
+  Austin                       558    93  0.122   0.101   0.113  market     -4.0
+  Los Angeles                  552    92  0.137   0.093   0.109  market     -6.6
+  Denver                       558    93  0.118   0.106   0.108  market     -2.8
+  Phoenix                      558    93  0.119   0.110   0.120  market     -1.7
+  Seattle                      558    93  0.120   0.111   0.118  market     -1.9
+  Atlanta                      558    93  0.119   0.107   0.122  market     -2.4
+  Dallas                       558    93  0.113   0.098   0.111  market     -3.0
+  Houston                      558    93  0.114   0.101   0.117  market     -2.6
+  Boston                       558    93  0.135   0.106   0.113  market     -4.4
+  Minneapolis                  558    93  0.136   0.110   0.115  market     -4.8
+
+Overall:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  ALL (excl Seattle)          6690  1115  0.123   0.102   0.113  market    -13.1
+
+v6.3 rules, live cities:
+                          bets   won mkt exp      P&L  per bet     z
+  Chicago                   91    38    46.2    -9.95   -10.9c  -1.9
+  New York                 101    45    47.4    -4.28    -4.2c  -0.5
+  Miami                     84    34    38.2    -5.78    -6.9c  -1.0
+  Austin                    96    46    46.1    -1.93    -2.0c  -0.0
+  Los Angeles              122    43    55.1   -14.29   -11.7c  -2.4
+  TOTAL                    494   206   232.9   -36.23    -7.3c  -2.6
+
+v6.4 rules, live cities minus Austin:
+                          bets   won mkt exp      P&L  per bet     z
+  Chicago                   85    37    44.5    -9.11   -10.7c  -1.8
+  New York                  92    43    45.5    -4.23    -4.6c  -0.6
+  Miami                     81    34    37.7    -5.28    -6.5c  -0.9
+  Los Angeles              118    43    53.7   -12.88   -10.9c  -2.2
+  TOTAL                    376   157   181.4   -31.50    -8.4c  -2.8
