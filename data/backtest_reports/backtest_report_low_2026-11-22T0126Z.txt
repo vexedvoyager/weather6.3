@@ -1,0 +1,150 @@
+=== Weather Bot backtest report — DAILY LOWS — 2026-11-22 01:26Z ===
+Forecast = NBM overnight-minimum column (valid 12Z on the market date; NBM's MinT window is 00Z-18Z). Kalshi settles on the calendar-day low (midnight-midnight local standard time), so lows set late in the evening are outside NBM's window.
+Markets: 3,486 from 2025-12 to 2026-03  |  development: 3,486  |  HOLDOUT (none yet): 0
+Rules simulated: v6.3 = gap >= 15 pts vs YES ask, YES ask >= 11c, 24h volume >= 10; v6.4 = v6.3 + no YES on above/below markets.
+Not simulated: the composite-score (order-book) filter. Brier: lower is better. 'day t' > +2 means the model beat the market reliably; < -2 the reverse.
+
+1. COVERAGE (city-days)
+  city             ok no mkts no fcst wrong stn error  first ok   last ok    quoted  series
+  Chicago          97     345       0         0     0  2025-12-13 2026-03-19    94%  KXLOWTCHI
+  New York         97     345       0         0     0  2025-12-13 2026-03-19    94%  KXLOWTNYC
+  Miami            97     345       0         0     0  2025-12-13 2026-03-19    94%  KXLOWTMIA
+  Austin           97     345       0         0     0  2025-12-13 2026-03-19    94%  KXLOWTAUS
+  Los Angeles      97     345       0         0     0  2025-12-13 2026-03-19    95%  KXLOWTLAX
+  Denver *         97     345       0         0     0  2025-12-13 2026-03-19    94%  KXLOWTDEN
+  Phoenix *         0     442       0         0     0  -          -              0%  
+  Seattle *         0     442       0         0     0  -          -              0%  
+  Atlanta *         0     442       0         0     0  -          -              0%  
+  Dallas *          0     442       0         0     0  -          -              0%  
+  Houston *         0     442       0         0     0  -          -              0%  
+  Boston *          0     442       0         0     0  -          -              0%  
+  Minneapolis *     0     442       0         0     0  -          -              0%  
+  * = shadow city (never traded live). 'quoted' = markets with a YES ask at the decision hour.
+  'wrong stn' = Kalshi's rules named a different settlement station than the city's; those days are never scored.
+  NBM V4.2: market dates 2025-01-02 to 2025-05-27
+  NBM V4.3: market dates 2025-05-28 to 2026-03-19
+  Markets Kalshi returned but not scored: 6 - result='scalar' x6
+    example: KXLOWTMIA-26JAN11-T70 {"can_close_early": true, "close_time": "2026-01-12T05:00:00Z", "created_time": "2026-01-10T10:30:52.961612Z", "early_close_condition": "The Last Trading Time will be 11:59 PM ET on January 11, 2026 regardless of any data releases or events occurring. Expiration will occur on the sooner of the first
+
+2. MODEL VS MARKET — DEVELOPMENT PERIOD
+
+By city:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  Chicago                      549    92  0.145   0.176   0.129  MODEL      +1.9
+  New York                     548    92  0.162   0.198   0.133  MODEL      +1.9
+  Miami                        544    91  0.141   0.172   0.129  MODEL      +1.8
+  Austin                       547    92  0.167   0.201   0.152  MODEL      +2.2
+  Los Angeles                  552    92  0.124   0.171   0.125  MODEL      +2.8
+  Denver                       549    92  0.132   0.189   0.136  MODEL      +3.2
+
+Overall:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  ALL (excl Seattle)          3289   551  0.145   0.184   0.134  MODEL      +5.6
+
+By NBM version:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  V4.3                        3289   551  0.145   0.184   0.134  MODEL      +5.6
+
+By season:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  DJF                         2605   437  0.146   0.201   0.137  MODEL      +6.4
+  MAM                          684   114  0.143   0.121   0.121  market     -4.0
+
+By year:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  2025                         491    84  0.147   0.485   0.189  MODEL     +13.4
+  2026                        2798   467  0.145   0.132   0.124  market     -3.9
+
+3. SIMULATED TRADING — DEVELOPMENT PERIOD (one contract per bet, after fees)
+
+v6.3 rules, live cities:
+                          bets   won mkt exp      P&L  per bet     z
+  Chicago                   73    40    41.8    -3.07    -4.2c  -0.5
+  New York                 100    53    59.4    -8.22    -8.2c  -1.5
+  Miami                     73    31    36.5    -6.80    -9.3c  -1.5
+  Austin                    70    32    40.2    -9.37   -13.4c  -2.4
+  Los Angeles               59    36    30.0    +4.93    +8.4c  +1.8
+  TOTAL                    375   192   208.0   -22.53    -6.0c  -1.9
+
+v6.4 rules (no YES on above/below), live cities minus Austin:
+                          bets   won mkt exp      P&L  per bet     z
+  Chicago                   58    36    38.9    -3.96    -6.8c  -0.9
+  New York                  78    49    53.8    -6.23    -8.0c  -1.3
+  Miami                     62    31    34.4    -4.56    -7.4c  -1.0
+  Los Angeles               44    31    26.2    +4.01    +9.1c  +1.6
+  TOTAL                    242   147   153.4   -10.74    -4.4c  -0.9
+
+v6.3 rules, shadow cities (never traded live):
+                          bets   won mkt exp      P&L  per bet     z
+  Denver                    53    29    31.5    -3.50    -6.6c  -0.8
+  TOTAL                     53    29    31.5    -3.50    -6.6c  -0.8
+
+v6.3 rules by bet type (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  NO bracket               171   121   127.0    -9.02    -5.3c  -1.1
+  NO threshold              68    45    49.1    -5.30    -7.8c  -1.2
+  YES bracket               59    12    15.2    -4.29    -7.3c  -1.0
+  YES threshold             77    14    16.7    -3.92    -5.1c  -0.8
+  TOTAL                    375   192   208.0   -22.53    -6.0c  -1.9
+
+v6.3 rules by edge size (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  15-25 pts                255   138   152.0   -18.43    -7.2c  -2.1
+  25-40 pts                 89    48    46.9    -0.52    -0.6c  +0.3
+  40+ pts                   31     6     9.1    -3.58   -11.5c  -1.3
+  TOTAL                    375   192   208.0   -22.53    -6.0c  -1.9
+
+v6.3 rules by side and price (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  NO 31-60c                 19    13    10.2    +2.46   +12.9c  +1.3
+  NO >60c                  220   153   165.9   -16.78    -7.6c  -2.1
+  YES 31-60c                34    13    12.4    -0.10    -0.3c  +0.2
+  YES <=30c                102    13    19.5    -8.11    -8.0c  -1.7
+  TOTAL                    375   192   208.0   -22.53    -6.0c  -1.9
+
+v6.3 rules by year (live cities):
+                          bets   won mkt exp      P&L  per bet     z
+  2025                       3     3     2.6    +0.35   +11.7c  +0.7
+  2026                     372   189   205.3   -22.88    -6.2c  -2.0
+  TOTAL                    375   192   208.0   -22.53    -6.0c  -1.9
+
+4. FORECAST ACCURACY — actual low minus NBM median (°F), monthly average
+  month     Chica  NewYo  Miami  Austi  LosAn  Denve  Phoen  Seatt  Atlan  Dalla  Houst  Bosto  Minne
+  2025-12    -1.7   -2.9   -0.5   -0.9   -0.3   +0.1                                                 
+  2026-01    -0.2   -1.9   -1.6   -0.5   -1.3   -0.7                                                 
+  2026-02    -1.3   +1.0   -0.6   -3.9   -1.0   -4.0                                                 
+  2026-03    -3.1   -1.7   -0.6   -0.7   -0.1   -1.9                                                 
+  typical     2.8    3.7    2.2    4.6    1.8    4.1                                                    (mean absolute miss)
+  in range    81%    63%    81%    53%    90%    66%                                                    (actual within P10-P90; target 80%)
+  Actual low = Kalshi's recorded value, else the winning bracket's midpoint; 31 city-days settled in an open-ended tail were left out.
+  Look for a sudden lasting jump in one column (e.g. a 2025 sensor replacement).
+
+5. NEW YORK DETAIL — DEVELOPMENT PERIOD
+
+By season:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  DJF                          434    73  0.161   0.218   0.136  MODEL      +2.5
+  MAM                          114    19  0.165   0.120   0.119  market     -3.5
+
+By NBM version:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  V4.3                         548    92  0.162   0.198   0.133  MODEL      +1.9
+
+By distance of the strike from the forecast median:
+                           markets  days   model mkt ask mkt mid  winner    day t
+  bracket far (>5F)            116    64  0.109   0.208   0.105  MODEL      +3.4
+  bracket near (<=2F)          119    73  0.175   0.196   0.157  MODEL      +1.0
+  bracket shoulder (2-5F)      130    81  0.174   0.200   0.162  MODEL      +1.3
+  threshold far (>5F)           73    64  0.104   0.169   0.051  MODEL      +2.4
+  threshold near (<=2F)         64    64  0.239   0.244   0.176  MODEL      +0.1
+  threshold shoulder (2-5F)      46    34  0.210   0.149   0.124  market     -2.1
+
+Simulated v6.3 bets by type:
+                          bets   won mkt exp      P&L  per bet     z
+  NO bracket                56    39    41.9    -3.90    -7.0c  -0.9
+  NO threshold              14     8     9.5    -1.75   -12.5c  -0.9
+  YES bracket                8     2     2.4    -0.58    -7.2c  -0.3
+  YES threshold             22     4     5.6    -1.99    -9.0c  -0.8
+  TOTAL                    100    53    59.4    -8.22    -8.2c  -1.5
+
+6. HOLDOUT — none collected yet (market dates from 2026-08-01 on)
