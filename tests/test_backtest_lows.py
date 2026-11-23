@@ -1,6 +1,6 @@
 """Daily-LOW backtest - offline tests built on a REAL NBM V4.2 bulletin
 (run 2024-12-07T13Z, all 13 stations, captured by the Capture NBM Fixtures workflow)."""
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -86,10 +86,14 @@ class FakeClient:
         if path in ("/historical/markets", "/markets"):
             return {"markets": self.events.get(params["event_ticker"], [])}
         if path.startswith("/historical/") and path.endswith("/candlesticks"):
-            from datetime import datetime, timezone
-            ts = int(datetime(2024, 12, 7, 19, tzinfo=timezone.utc).timestamp())
-            return {"candlesticks": [{"end_period_ts": ts, "volume": "40.00",
-                                      "yes_ask": {"close": "0.30"}, "yes_bid": {"close": "0.26"}}]}
+            # New York's climate day for Dec 8 starts 05Z Dec 8, so the quote hours are
+            # -6h = 23Z Dec 7, -3h = 02Z (primary), +1h = 06Z, +3h = 08Z.
+            def c(day, hour, ask, bid):
+                ts = int(datetime(2024, 12, day, hour, tzinfo=timezone.utc).timestamp())
+                return {"end_period_ts": ts, "volume": "20.00",
+                        "yes_ask": {"close": ask}, "yes_bid": {"close": bid}}
+            return {"candlesticks": [c(7, 23, "0.40", "0.35"), c(8, 2, "0.30", "0.26"),
+                                     c(8, 6, "0.20", "0.18"), c(8, 8, "0.10", "0.08")]}
         return {"candlesticks": []}
 
 
@@ -98,9 +102,12 @@ class Resp:
         self.status_code, self.text = status, text
 
 
-CITIES = [({"name": "New York", "kalshi_series_prefix": "KXHIGHNY", "expected_station": "KNYC"}, False),
-          ({"name": "Chicago", "kalshi_series_prefix": "KXHIGHCHI", "expected_station": "KMDW"}, False),
-          ({"name": "Miami", "kalshi_series_prefix": "KXHIGHMIA", "expected_station": "KMIA"}, False)]
+CITIES = [({"name": "New York", "kalshi_series_prefix": "KXHIGHNY", "expected_station": "KNYC",
+            "timezone": "America/New_York"}, False),
+          ({"name": "Chicago", "kalshi_series_prefix": "KXHIGHCHI", "expected_station": "KMDW",
+            "timezone": "America/Chicago"}, False),
+          ({"name": "Miami", "kalshi_series_prefix": "KXHIGHMIA", "expected_station": "KMIA",
+            "timezone": "America/New_York"}, False)]
 
 
 @pytest.fixture
@@ -110,7 +117,8 @@ def collected(tmp_path):
     src = bt.Sources(FakeClient(), pause_s=0,
                      http_get=lambda url, timeout=None: Resp(200, FIXTURE.read_text())
                      if "blend.20241207/13/" in url else Resp(404))
-    counts = bt.collect_month(conn, src, CITIES, 2024, 12, sigma=1.15, kind="low")
+    # The fixture is a 13Z run; real low backtests use the 19Z run (LOW_RUN_HOUR).
+    counts = bt.collect_month(conn, src, CITIES, 2024, 12, sigma=1.15, kind="low", run_hour=13)
     return conn, counts, db
 
 
@@ -148,3 +156,44 @@ def test_report_labels_itself_as_lows(collected):
     text = build_report(str(db), holdout_from="2027-01-01")
     assert "DAILY LOWS" in text and "actual low minus NBM median" in text
     assert "wrong stn" in text and "KXLOWTNYC" in text
+
+
+# --- timing (revised 2026-11-21) ---------------------------------------------------------
+
+@pytest.mark.parametrize("tz,hour", [("America/New_York", 5), ("America/Chicago", 6),
+                                     ("America/Denver", 7), ("America/Phoenix", 7),
+                                     ("America/Los_Angeles", 8)])
+def test_climate_day_starts_at_local_standard_midnight_all_year(tz, hour):
+    for d in (date(2026, 1, 10), date(2026, 7, 10)):          # winter and summer (DST)
+        start = bt.climate_day_start_utc(d, tz)
+        assert (start.date(), start.hour) == (d, hour)
+
+
+def test_low_decision_is_9pm_local_standard_the_evening_before():
+    t = bt.decision_times("low", date(2024, 12, 7), MARKET_DATE, "America/New_York")
+    primary = datetime.fromtimestamp(t["primary"], tz=timezone.utc)
+    assert (primary.day, primary.hour) == (8, 2)               # 02Z Dec 8 = 9 PM EST Dec 7
+    assert sorted(k for k in t if k != "primary") == [-6, -3, 1, 3]
+
+
+def test_high_decision_is_unchanged():
+    t = bt.decision_times("high", date(2024, 12, 7), MARKET_DATE, "America/New_York")
+    assert datetime.fromtimestamp(t["primary"], tz=timezone.utc) == datetime(2024, 12, 7, 19, tzinfo=timezone.utc)
+
+
+def test_lows_store_the_primary_quote_and_every_quote_hour(collected):
+    conn, *_ = collected
+    asks = {r[0] for r in conn.execute("SELECT yes_ask_cents FROM bt_markets WHERE city='New York'")}
+    assert asks == {30}                                         # 9 PM quote, never a later one
+    by_offset = dict(conn.execute("SELECT offset_h, MAX(yes_ask_cents) FROM bt_quotes "
+                                  "WHERE ticker LIKE 'KXLOWTNYC%' GROUP BY offset_h").fetchall())
+    assert by_offset == {-6: 40, -3: 30, 1: 20, 3: 10}
+
+
+def test_low_runs_default_to_the_19z_bulletin():
+    seen = []
+    src = bt.Sources(FakeClient(), pause_s=0,
+                     http_get=lambda url, timeout=None: (seen.append(url), Resp(404))[1])
+    conn = bt.open_db(":memory:", "low")
+    bt.collect_month(conn, src, CITIES[:1], 2024, 12, sigma=1.15, kind="low")
+    assert seen and all("/19/text/blend_nbptx.t19z" in u for u in seen)
