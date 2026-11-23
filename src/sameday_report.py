@@ -75,8 +75,12 @@ def state_at(obs: list[dict], day_start: int, day_end: int, t: int,
             break
         f = obs_value_f(o)
         if f is not None:
-            vals.append(f)
             current = f
+            # Only the tenths-of-a-degree T-group recovers the ASOS whole-degree F
+            # exactly. A report without one (e.g. a 5-minute METAR, whole degrees C)
+            # can read 1-2F high after conversion, so it never raises the running max.
+            if o.get("t_group_c") is not None:
+                vals.append(f)
         if o.get("max6_c") is not None and v - 6 * 3600 >= day_start:
             vals.append(c_to_f_whole(o["max6_c"]))
     return (max(vals) if vals else None), current
