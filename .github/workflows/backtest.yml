@@ -57,20 +57,34 @@ jobs:
           REDO: ${{ github.event.inputs.redo }}
           KIND: ${{ github.event.inputs.kind }}
         run: |
-          git config user.name "predict-weather-bot"
-          git config user.email "actions@github.com"
           DB=data/backtest.db; [ "$KIND" = "low" ] && DB=data/backtest_low.db
-          save() {
-            git add "$DB"
-            git diff --quiet --cached && return 0
-            git commit -m "$1"
-            # Price Check pushes every 5 minutes; rebase onto it and retry.
+          # Saves files to the repo WITHOUT ever leaving this checkout mid-rebase (the cause of
+          # the first lows run's "exit code 1"): each try starts from a fresh copy of the latest
+          # remote branch in a separate folder, copies our files in, commits and pushes. This
+          # job is the only writer of these files, so overwriting them is correct. A failed
+          # save never fails the run - the artifact has the data and re-running resumes.
+          publish() {
+            msg="$1"; shift
             for i in 1 2 3 4 5 6; do
-              if git pull --rebase origin "$GITHUB_REF_NAME" && git push; then return 0; fi
+              rm -rf /tmp/pub; git worktree prune
+              if git fetch -q origin "$GITHUB_REF_NAME" && git worktree add -q --detach /tmp/pub FETCH_HEAD; then
+                added=""
+                for f in "$@"; do
+                  if [ -d "$f" ]; then mkdir -p "/tmp/pub/$f"; cp -r "$f/." "/tmp/pub/$f/"; added="$added $f"
+                  elif [ -f "$f" ]; then mkdir -p "/tmp/pub/$(dirname "$f")"; cp "$f" "/tmp/pub/$f"; added="$added $f"; fi
+                done
+                if [ -z "$added" ]; then return 0; fi
+                if (cd /tmp/pub && git add $added && { git diff --cached --quiet || \
+                      { git -c user.name="predict-weather-bot" -c user.email="actions@github.com" commit -q -m "$msg" && \
+                        git push -q origin "HEAD:$GITHUB_REF_NAME"; }; }); then
+                  rm -rf /tmp/pub; git worktree prune; return 0
+                fi
+              fi
+              echo "save attempt $i failed; retrying"
               sleep $((i * 15))
             done
-            echo "::warning::could not push backtest.db after 6 tries"
-            return 1
+            echo "::warning::could not save $* to the repo after 6 tries; it is in the downloadable artifact, and re-running the same months resumes"
+            return 0
           }
           for m in $(python -c "from src.backtest import parse_months; import os; print(' '.join(f'{y}-{mo:02d}' for y, mo in parse_months(os.environ['MONTHS'])))"); do
             echo "::group::Month $m"
@@ -80,7 +94,7 @@ jobs:
               python -m src.backtest --kind "$KIND" --months "$m"
             fi
             echo "::endgroup::"
-            save "Backtest data $m"
+            publish "Backtest data ($KIND) $m" "$DB"
           done
 
       - name: Build report
@@ -92,16 +106,35 @@ jobs:
       - name: Save report to repo
         if: always()
         run: |
-          git config user.name "predict-weather-bot"
-          git config user.email "actions@github.com"
-          git add data/backtest_reports/ data/backtest.db data/backtest_low.db 2>/dev/null || true
-          git diff --quiet --cached && exit 0
-          git commit -m "Backtest report $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          for i in 1 2 3 4 5 6; do
-            if git pull --rebase origin "$GITHUB_REF_NAME" && git push; then exit 0; fi
-            sleep $((i * 15))
-          done
-          echo "::warning::could not push the report; it is still in the downloadable artifact"
+          # Saves files to the repo WITHOUT ever leaving this checkout mid-rebase (the cause of
+          # the first lows run's "exit code 1"): each try starts from a fresh copy of the latest
+          # remote branch in a separate folder, copies our files in, commits and pushes. This
+          # job is the only writer of these files, so overwriting them is correct. A failed
+          # save never fails the run - the artifact has the data and re-running resumes.
+          publish() {
+            msg="$1"; shift
+            for i in 1 2 3 4 5 6; do
+              rm -rf /tmp/pub; git worktree prune
+              if git fetch -q origin "$GITHUB_REF_NAME" && git worktree add -q --detach /tmp/pub FETCH_HEAD; then
+                added=""
+                for f in "$@"; do
+                  if [ -d "$f" ]; then mkdir -p "/tmp/pub/$f"; cp -r "$f/." "/tmp/pub/$f/"; added="$added $f"
+                  elif [ -f "$f" ]; then mkdir -p "/tmp/pub/$(dirname "$f")"; cp "$f" "/tmp/pub/$f"; added="$added $f"; fi
+                done
+                if [ -z "$added" ]; then return 0; fi
+                if (cd /tmp/pub && git add $added && { git diff --cached --quiet || \
+                      { git -c user.name="predict-weather-bot" -c user.email="actions@github.com" commit -q -m "$msg" && \
+                        git push -q origin "HEAD:$GITHUB_REF_NAME"; }; }); then
+                  rm -rf /tmp/pub; git worktree prune; return 0
+                fi
+              fi
+              echo "save attempt $i failed; retrying"
+              sleep $((i * 15))
+            done
+            echo "::warning::could not save $* to the repo after 6 tries; it is in the downloadable artifact, and re-running the same months resumes"
+            return 0
+          }
+          publish "Backtest report $(date -u +%Y-%m-%dT%H:%M:%SZ)" data/backtest_reports data/backtest.db data/backtest_low.db
 
       - name: Upload report and database
         if: always()
