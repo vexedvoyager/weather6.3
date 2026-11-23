@@ -190,3 +190,15 @@ def test_report_end_to_end(tmp_path):
     text = rep.build_report(str(tmp_path / "s.db"), str(tmp_path / "b.db"))
     assert "C. DATA CHECK" in text and "A. THE HIGH-SO-FAR BRACKET" in text and "VERDICT" in text
     assert "New York" in text and "City-days with observations and intraday quotes: 1" in text
+
+
+def test_whole_degree_report_never_raises_running_max():
+    # NWS FAQ: 5-minute METARs carry whole degrees C, which can read 1-2F above the
+    # ASOS value once converted back. Such a report sets the current temp only.
+    obs = sorted([ob(17, 51, tg=13.3),            # 56F, exact
+                  ob(18, 5, f=58.0)],             # whole-C report, no T-group
+                 key=lambda o: o["valid_ts"])
+    ts = [o["valid_ts"] for o in obs]
+    t = int(datetime(2025, 1, 8, 19, 0, tzinfo=timezone.utc).timestamp())
+    run_max, current = rep.state_at(obs, START, END, t, ts)
+    assert run_max == 56 and current == 58
