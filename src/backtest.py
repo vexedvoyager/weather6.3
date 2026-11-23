@@ -35,6 +35,7 @@ import sqlite3
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import requests
 import yaml
@@ -51,8 +52,21 @@ AWS_BASE = "https://noaa-nbm-grib2-pds.s3.amazonaws.com"
 DEFAULT_DB = "data/backtest.db"
 DEFAULT_DBS = {"high": "data/backtest.db", "low": "data/backtest_low.db"}
 KINDS = ("high", "low")
-RUN_HOUR = 13            # NBM run used (published ~14-15Z)
-DECISION_HOUR = 19       # UTC hour the simulated decision is made, on the run date
+RUN_HOUR = 13            # NBM run used for HIGHS (published ~14-15Z)
+DECISION_HOUR = 19       # UTC hour the simulated HIGHS decision is made, on the run date
+
+# LOWS timing (revised 2026-11-21 after the first lows run): at 19Z the day before,
+# 712 of 720 low markets had no trading in the previous 24h and showed placeholder
+# quotes (1c bid / 99c ask), so that is not a real market price. Lows now use the
+# 19Z NBM run of the previous day (published ~20-21Z) and take quotes at fixed
+# hours relative to MIDNIGHT LOCAL STANDARD TIME on the market date (the start of
+# Kalshi's climate day). PRIMARY = 9 PM the evening before (-3h): the latest point
+# at which nothing of the climate day has been observed yet, so the market and the
+# model are both still forecasting. The other hours are reported for context only;
+# +1h and +3h can include early-morning observations the model doesn't have.
+LOW_RUN_HOUR = 19
+LOW_QUOTE_OFFSETS_H = (-6, -3, 1, 3)
+LOW_PRIMARY_OFFSET_H = -3
 QUOTE_LOOKBACK_H = 6     # use the last quote within this many hours before the decision
 VOLUME_WINDOW_H = 24     # candles fetched for the 24h volume figure
 REQUEST_PAUSE_S = 0.08   # stay well under Kalshi's read rate limit
@@ -94,6 +108,15 @@ CREATE TABLE IF NOT EXISTS bt_markets (
     outcome TEXT,                       -- 'yes' / 'no' from Kalshi's result
     expiration_value TEXT,              -- the actual high when Kalshi recorded it
     collected_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS bt_quotes (
+    ticker TEXT NOT NULL,               -- lows only: the quote at several hours around the climate day start
+    offset_h INTEGER NOT NULL,          -- hours from midnight local standard time on the market date
+    yes_ask_cents INTEGER,
+    yes_bid_cents INTEGER,
+    quote_ts INTEGER,
+    volume_24h INTEGER,
+    PRIMARY KEY (ticker, offset_h)
 );
 CREATE TABLE IF NOT EXISTS bt_meta (
     key TEXT PRIMARY KEY,               -- 'kind' = high | low
@@ -199,6 +222,30 @@ def get_min_temp_forecast(parsed: dict, run_id: str, market_date) -> dict | None
             out[key] = values[idx]
         return {"values": out, "column_index": idx, "forecast_hour": fhr}
     return None
+
+
+def climate_day_start_utc(market_date, tz_name: str) -> datetime:
+    """Midnight LOCAL STANDARD TIME on market_date, in UTC - the start of the NWS
+    climate day Kalshi settles on (standard time all year, even during DST).
+    New York -> 05Z, Chicago -> 06Z, Denver/Phoenix -> 07Z, Los Angeles -> 08Z."""
+    std_offset = ZoneInfo(tz_name).utcoffset(datetime(market_date.year, 1, 15)) or timedelta(0)
+    # January is standard time everywhere in the US; Phoenix has no DST at all.
+    local_midnight = datetime(market_date.year, market_date.month, market_date.day)
+    return (local_midnight - std_offset).replace(tzinfo=timezone.utc)
+
+
+def decision_times(kind: str, run_date, market_date, tz_name: str | None,
+                   decision_hour: int = DECISION_HOUR) -> dict:
+    """{offset_h or 'primary': unix ts}. Highs: one decision at 19Z on the run date.
+    Lows: one per LOW_QUOTE_OFFSETS_H around the climate-day start; 'primary' is -3h."""
+    if kind == "low":
+        start = climate_day_start_utc(market_date, tz_name or "America/New_York")
+        times = {o: int((start + timedelta(hours=o)).timestamp()) for o in LOW_QUOTE_OFFSETS_H}
+        times["primary"] = times[LOW_PRIMARY_OFFSET_H]
+        return times
+    ts = int(datetime(run_date.year, run_date.month, run_date.day, decision_hour,
+                      tzinfo=timezone.utc).timestamp())
+    return {"primary": ts}
 
 
 def forecast_for(kind: str, parsed: dict, run_id: str, market_date):
@@ -415,9 +462,10 @@ def collect_city_day(conn, src: Sources, city: dict, is_shadow: bool, parsed: di
     if prefix_hint is not None:
         prefix_hint[name] = prefix
 
-    decision_ts = int(datetime(run_date.year, run_date.month, run_date.day, decision_hour,
-                               tzinfo=timezone.utc).timestamp())
-    start_ts = decision_ts - VOLUME_WINDOW_H * 3600
+    times = decision_times(kind, run_date, market_date, city.get("timezone"), decision_hour)
+    decision_ts = times["primary"]
+    start_ts = min(times.values()) - VOLUME_WINDOW_H * 3600
+    end_ts = max(times.values())
     n = 0
     now = datetime.now(timezone.utc).isoformat()
     for m in markets:
@@ -448,8 +496,17 @@ def collect_city_day(conn, src: Sources, city: dict, is_shadow: bool, parsed: di
                  str(result), str(m.get("status")), str(m.get("strike_type")),
                  str(m.get("floor_strike")), str(m.get("cap_strike")), json.dumps(m)[:2000]))
             continue
-        candles = src.candles(prefix, ticker, start_ts, decision_ts)
+        candles = src.candles(prefix, ticker, start_ts, end_ts)
         q = quote_at_decision(candles, decision_ts)
+        for off, ts in times.items():
+            if off == "primary":
+                continue
+            qo = quote_at_decision(candles, ts)
+            conn.execute(
+                "INSERT OR REPLACE INTO bt_quotes (ticker, offset_h, yes_ask_cents, yes_bid_cents,"
+                " quote_ts, volume_24h) VALUES (?,?,?,?,?,?)",
+                (ticker, off, qo["yes_ask"] if qo else None, qo["yes_bid"] if qo else None,
+                 qo["ts"] if qo else None, volume_before(candles, ts)))
         conn.execute(
             "INSERT OR REPLACE INTO bt_markets (ticker, city, is_shadow, series_prefix, market_date,"
             " run_id, nbm_version, forecast_hour, ladder_json, kind, strike_type, floor_strike,"
@@ -471,8 +528,10 @@ def collect_city_day(conn, src: Sources, city: dict, is_shadow: bool, parsed: di
 
 
 def collect_month(conn, src: Sources, cities: list[tuple[dict, bool]], year: int, month: int,
-                  sigma: float, run_hour: int = RUN_HOUR, decision_hour: int = DECISION_HOUR,
+                  sigma: float, run_hour: int | None = None, decision_hour: int = DECISION_HOUR,
                   redo: bool = False, kind: str = "high") -> dict:
+    if run_hour is None:
+        run_hour = LOW_RUN_HOUR if kind == "low" else RUN_HOUR
     counts = {"ok": 0, "no_markets": 0, "no_forecast": 0, "error": 0, "skipped": 0,
               "no_bulletin": 0, "wrong_station": 0}
     prefix_hint = {}

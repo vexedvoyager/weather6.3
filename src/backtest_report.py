@@ -90,6 +90,39 @@ def complete_days_only(rows: list[dict]) -> tuple[list[dict], list[tuple[str, st
     return keep, sorted(bad)
 
 
+MAX_TRADEABLE_SPREAD = 20   # cents; fixed 2026-11-21 before any lows results at real hours
+
+
+def is_tradeable(r: dict) -> bool:
+    """A real two-sided quote: someone bidding at least 1c and asking at most 20c more.
+    Placeholder books (e.g. 1c bid / 99c ask on a market nobody trades) fail this."""
+    ask, bid = r.get("yes_ask_cents"), r.get("yes_bid_cents")
+    return (ask is not None and bid is not None and bid >= 1 and ask <= 99
+            and ask - bid <= MAX_TRADEABLE_SPREAD)
+
+
+def blend_scores(rows: list[dict], weights=(0.0, 0.1, 0.2, 0.3, 0.5, 1.0)) -> dict:
+    """Brier of w*model + (1-w)*market midpoint, tradeable quotes only. If no w > 0
+    beats w = 0, the market already contains everything the model knows."""
+    q = [r for r in rows if is_tradeable(r)]
+    if not q:
+        return {}
+    o = lambda r: 1.0 if r["outcome"] == "yes" else 0.0
+    mid = lambda r: (r["yes_ask_cents"] + r["yes_bid_cents"]) / 200
+    return {w: sum((w * r["model_prob"] + (1 - w) * mid(r) - o(r)) ** 2 for r in q) / len(q)
+            for w in weights}
+
+
+def blend_line(out, rows, label):
+    b = blend_scores(rows)
+    if not b:
+        out(f"  {label:12s} (no tradeable quotes)")
+        return
+    best = min(b, key=b.get)
+    out(f"  {label:12s} " + "  ".join(f"w={w:.1f}: {v:.4f}" for w, v in b.items())
+        + f"   -> best w = {best:.1f}" + ("  (market alone)" if best == 0 else ""))
+
+
 def brier(pairs) -> float | None:
     pairs = list(pairs)
     return sum((p - o) ** 2 for p, o in pairs) / len(pairs) if pairs else None
@@ -221,6 +254,10 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
         skipped = [dict(r) for r in conn.execute("SELECT * FROM bt_skipped")]
     except sqlite3.OperationalError:      # databases from before the table existed
         skipped = []
+    try:
+        quotes = [dict(r) for r in conn.execute("SELECT * FROM bt_quotes")]
+    except sqlite3.OperationalError:
+        quotes = []
     out = Report()
     try:
         kind = (conn.execute("SELECT value FROM bt_meta WHERE key='kind'").fetchone() or ["high"])[0]
@@ -232,6 +269,8 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
         out("Forecast = NBM overnight-minimum column (valid 12Z on the market date; NBM's MinT window is "
             "00Z-18Z). Kalshi settles on the calendar-day low (midnight-midnight local standard time), "
             "so lows set late in the evening are outside NBM's window.")
+        out("Decision (fixed 2026-11-21): 19Z NBM run of the previous day; market quote at 9 PM local "
+            "standard time the evening before the market date (before any of the climate day is observed).")
     if not rows:
         out("No markets collected yet. Run the 'Run Backtest' workflow first."
             if not all_rows else "No complete city-days yet (see incomplete-day note).")
@@ -298,6 +337,20 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
         out(f"  {len(errs)} city-days hit errors (re-running the same months retries them); "
             f"first: {errs[0]['city']} {errs[0]['market_date']} {errs[0]['detail'][:120]}")
 
+    # 1b. Quote quality
+    quoted = [r for r in rows if r["yes_ask_cents"] is not None]
+    two_sided = [r for r in quoted if (r["yes_bid_cents"] or 0) >= 1]
+    spreads = sorted(r["yes_ask_cents"] - r["yes_bid_cents"] for r in two_sided)
+    out("\n1b. QUOTE QUALITY (at the decision time)")
+    out(f"  quoted {len(quoted):,} of {len(rows):,} markets; two-sided (bid >= 1c) "
+        f"{100 * len(two_sided) / max(len(quoted), 1):.0f}%; median spread "
+        f"{spreads[len(spreads) // 2] if spreads else '-'}c; tradeable (two-sided, spread <= "
+        f"{MAX_TRADEABLE_SPREAD}c) {100 * sum(map(is_tradeable, quoted)) / max(len(quoted), 1):.0f}%; "
+        f"24h volume >= 10: {100 * sum((r['volume_24h'] or 0) >= 10 for r in quoted) / max(len(quoted), 1):.0f}%")
+    if quoted and sum(map(is_tradeable, quoted)) < 0.5 * len(quoted):
+        out("  WARNING: most quotes are not tradeable, so 'market' scores below mostly measure empty "
+            "order books, not traders' estimates. Use the 'tradeable quotes only' lines.")
+
     # 2. Scorecards (development period)
     out("\n2. MODEL VS MARKET — DEVELOPMENT PERIOD")
     scorecard(out, dev, lambda r: r["city"], "By city:", city_order)
@@ -306,6 +359,50 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
     scorecard(out, dev, lambda r: SEASONS[int(r["market_date"][5:7])], "By season:",
               ["DJF", "MAM", "JJA", "SON"])
     scorecard(out, dev, lambda r: r["market_date"][:4], "By year:")
+    scorecard(out, [r for r in dev if is_tradeable(r)], lambda r: r["city"],
+              f"By city, TRADEABLE QUOTES ONLY (bid >= 1c, spread <= {MAX_TRADEABLE_SPREAD}c):", city_order)
+    scorecard(out, [r for r in dev if is_tradeable(r) and r["city"] != "Seattle"],
+              lambda r: "ALL (excl Seattle)", "Overall, TRADEABLE QUOTES ONLY:")
+    out("\n2c. BLEND TEST — does the model add anything to the market? (tradeable quotes, excl Seattle)")
+    out("  Brier of w x model + (1 - w) x market midpoint; lower is better.")
+    blend_line(out, [r for r in dev if r["city"] != "Seattle"], "development")
+
+    if kind == "low" and quotes:
+        out("\n2d. LOWS BY QUOTE HOUR (development; tradeable quotes only)")
+        out("  Hours are relative to midnight local standard time on the market date. 9 PM is the "
+            "decision; 1 AM and 3 AM can include early-morning readings the model doesn't have.")
+        labels = {-6: "6 PM before", -3: "9 PM before", 1: "1 AM", 3: "3 AM"}
+        by_t = defaultdict(dict)
+        for qrow in quotes:
+            by_t[qrow["ticker"]][qrow["offset_h"]] = qrow
+        dev_by_ticker = {r["ticker"]: r for r in dev}
+        out(f"  {'hour':12s} {'quoted':>7s} {'tradeable':>9s} {'med spread':>10s} {'vol>=10':>7s}"
+            f"  {'model':>6s} {'mkt mid':>7s}  {'day t':>6s}")
+        for off in sorted({q["offset_h"] for q in quotes}):
+            rs = []
+            for t, r in dev_by_ticker.items():
+                qq = by_t.get(t, {}).get(off)
+                if qq:
+                    rs.append(dict(r, yes_ask_cents=qq["yes_ask_cents"], yes_bid_cents=qq["yes_bid_cents"],
+                                   volume_24h=qq["volume_24h"]))
+            qd = [r for r in rs if r["yes_ask_cents"] is not None]
+            tr = [r for r in qd if is_tradeable(r)]
+            sp = sorted(r["yes_ask_cents"] - r["yes_bid_cents"] for r in tr)
+            if not tr:
+                out(f"  {labels.get(off, off):12s} {len(qd):7d} {0:9d}")
+                continue
+            o = lambda r: 1.0 if r["outcome"] == "yes" else 0.0
+            bm = brier((r["model_prob"], o(r)) for r in tr)
+            bk = brier(((r["yes_ask_cents"] + r["yes_bid_cents"]) / 200, o(r)) for r in tr)
+            days_ = defaultdict(list)
+            for r in tr:
+                days_[(r["city"], r["market_date"])].append(r)
+            diffs = [brier(((r["yes_ask_cents"] + r["yes_bid_cents"]) / 200, o(r)) for r in d) -
+                     brier((r["model_prob"], o(r)) for r in d) for d in days_.values()]
+            t = (st.mean(diffs) / (st.stdev(diffs) / math.sqrt(len(diffs)))) \
+                if len(diffs) > 2 and st.stdev(diffs) > 0 else 0.0
+            out(f"  {labels.get(off, off):12s} {len(qd):7d} {len(tr):9d} {sp[len(sp) // 2]:9d}c "
+                f"{sum((r['volume_24h'] or 0) >= 10 for r in qd):7d}  {bm:.3f} {bk:7.3f}  {t:+6.1f}")
 
     # 3. Simulated trading (development period)
     out("\n3. SIMULATED TRADING — DEVELOPMENT PERIOD (one contract per bet, after fees)")
@@ -391,6 +488,10 @@ def build_report(db_path: str, config_path: str = "config.yaml", holdout_from: s
         out("  Read this LAST. If the development-period story holds here too, it's more likely real.")
         scorecard(out, ho, lambda r: r["city"], "By city:", city_order)
         scorecard(out, [r for r in ho if r["city"] != "Seattle"], lambda r: "ALL (excl Seattle)", "Overall:")
+        scorecard(out, [r for r in ho if is_tradeable(r) and r["city"] != "Seattle"],
+                  lambda r: "ALL (excl Seattle)", "Overall, TRADEABLE QUOTES ONLY:")
+        out("\n  Blend test (tradeable quotes, excl Seattle):")
+        blend_line(out, [r for r in ho if r["city"] != "Seattle"], "holdout")
         sim_table(out, [r for r in ho if r["city"] in traded], lambda r, b: r["city"],
                   "v6.3 rules, live cities:", base_rules, traded)
         sim_table(out, [r for r in ho if r["city"] in traded and r["city"] != "Austin"],
