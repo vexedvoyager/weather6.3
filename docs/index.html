@@ -138,15 +138,15 @@
 
   <h1>Predict Weather Bot <span style="font-weight:400;opacity:.6">v6.3</span></h1>
   <div class="hero">
-    <div class="hero-number loss">$-447.10</div>
-    <div class="hero-label">Total settled P&amp;L, 376 trade(s) settled, 42% win rate</div>
+    <div class="hero-number loss">$-452.30</div>
+    <div class="hero-label">Total settled P&amp;L, 377 trade(s) settled, 42% win rate</div>
   </div>
 
   <div class="conditions">
     <div><span class="label">Mode</span><span class="value">PAPER</span></div>
-    <div><span class="label">Deployed</span><span class="value">$19.34 / $50.00</span></div>
-    <div><span class="label">Open positions</span><span class="value">4</span></div>
-    <div><span class="label">Last updated</span><span class="value">2026-11-23 14:24 UTC</span></div>
+    <div><span class="label">Deployed</span><span class="value">$28.58 / $50.00</span></div>
+    <div><span class="label">Open positions</span><span class="value">6</span></div>
+    <div><span class="label">Last updated</span><span class="value">2026-11-24 01:49 UTC</span></div>
   </div>
 
   <section>
@@ -175,10 +175,10 @@
         </tr>
         <tr>
           <td>Los Angeles</td>
-          <td>73</td>
+          <td>74</td>
           <td>30</td>
-          <td>43</td>
-          <td class="loss">$-122.24</td>
+          <td>44</td>
+          <td class="loss">$-127.44</td>
         </tr>
         <tr>
           <td>Miami</td>
@@ -198,11 +198,41 @@
   </section>
 
   <section>
-    <h2>Open positions (4)</h2>
+    <h2>Open positions (6)</h2>
     <p class="neutral" style="margin: 4px 0 12px">Market day = the date the contract is about. Opened/settled times are UTC.</p>
     <table>
       <tr><th>City</th><th>Market day</th><th>Contract</th><th>Side</th><th>Position</th><th>Model</th><th>Opened</th><th>Status</th></tr>
       
+    <tr>
+      <td>New York</td>
+      <td>Nov 24</td>
+      <td>high 53-54°F</td>
+      <td>NO</td>
+      <td>6x @ 79&cent;</td>
+      <td>2%</td>
+      <td class="neutral">Nov 24, 01:49 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
+    <tr>
+      <td>Chicago</td>
+      <td>Nov 24</td>
+      <td>high 40-41°F</td>
+      <td>NO</td>
+      <td>9x @ 54&cent;</td>
+      <td>16%</td>
+      <td class="neutral">Nov 24, 01:49 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
+    <tr>
+      <td>Chicago</td>
+      <td>Nov 24</td>
+      <td>high 42-43°F</td>
+      <td>YES</td>
+      <td>10x @ 46&cent;</td>
+      <td>65%</td>
+      <td class="neutral">Nov 24, 01:49 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
     <tr>
       <td>New York</td>
       <td>Nov 23</td>
@@ -233,16 +263,6 @@
       <td class="neutral">Nov 22, 17:59 UTC</td>
       <td class="neutral">open</td>
     </tr>
-    <tr>
-      <td>Los Angeles</td>
-      <td>Nov 22</td>
-      <td>high 67-68°F</td>
-      <td>NO</td>
-      <td>16x @ 31&cent;</td>
-      <td>41%</td>
-      <td class="neutral">Nov 21, 22:52 UTC</td>
-      <td class="neutral">open</td>
-    </tr>
     </table>
   </section>
 
@@ -251,6 +271,16 @@
     <table>
       <tr><th>City</th><th>Market day</th><th>Contract</th><th>Side</th><th>Position</th><th>Model</th><th>Opened</th><th>Outcome</th><th>Settled</th></tr>
       
+    <tr>
+      <td>Los Angeles</td>
+      <td>Nov 22</td>
+      <td>high 67-68°F</td>
+      <td>NO</td>
+      <td>16x @ 31&cent;</td>
+      <td>41%</td>
+      <td class="neutral">Nov 21, 22:52 UTC</td>
+      <td class="loss">YES &middot; $-5.20</td><td class="neutral">Nov 24, 01:48 UTC</td>
+    </tr>
     <tr>
       <td>Chicago</td>
       <td>Nov 22</td>
@@ -491,16 +521,6 @@
       <td class="neutral">Nov 17, 02:39 UTC</td>
       <td class="gain">NO &middot; $+3.06</td><td class="neutral">Nov 18, 18:52 UTC</td>
     </tr>
-    <tr>
-      <td>Miami</td>
-      <td>Nov 17</td>
-      <td>high 78-79°F</td>
-      <td>NO</td>
-      <td>8x @ 58&cent;</td>
-      <td>6%</td>
-      <td class="neutral">Nov 16, 19:48 UTC</td>
-      <td class="gain">NO &middot; $+3.22</td><td class="neutral">Nov 18, 18:52 UTC</td>
-    </tr>
     </table>
   </section>
 
@@ -622,10 +642,10 @@
     <h2>Model self-audit (Brier score)</h2>
     
         <div class="brier-grid">
-          <div><span class="label">Trades audited</span><span class="value">45</span></div>
-          <div><span class="label">Model Brier score</span><span class="value">0.2838</span></div>
-          <div><span class="label">Market price Brier</span><span class="value">0.2141</span></div>
-          <div><span class="label">Base rate Brier score</span><span class="value">0.2499</span></div>
+          <div><span class="label">Trades audited</span><span class="value">46</span></div>
+          <div><span class="label">Model Brier score</span><span class="value">0.2851</span></div>
+          <div><span class="label">Market price Brier</span><span class="value">0.2115</span></div>
+          <div><span class="label">Base rate Brier score</span><span class="value">0.2500</span></div>
           <div><span class="label">Verdict</span><span class="value loss">NO SKILL</span></div>
         </div>
         <p class="neutral">(early read, 100+ needed for full confidence)</p>
@@ -641,11 +661,11 @@ const ctx = document.getElementById('pnlChart').getContext('2d');
 new Chart(ctx, {
   type: 'line',
   data: {
-    labels: ["10-10", "10-11", "10-12", "10-13", "10-14", "10-15", "10-16", "10-17", "10-18", "10-19", "10-20", "10-21", "10-22", "10-23", "10-24", "10-25", "10-26", "10-27", "10-28", "10-29", "10-30", "10-31", "11-01", "11-02", "11-03", "11-04", "11-05", "11-06", "11-07", "11-08", "11-09", "11-10", "11-11", "11-12", "11-13", "11-14", "11-15", "11-16", "11-17", "11-18", "11-19", "11-20", "11-21", "11-22", "11-23"],
+    labels: ["10-11", "10-12", "10-13", "10-14", "10-15", "10-16", "10-17", "10-18", "10-19", "10-20", "10-21", "10-22", "10-23", "10-24", "10-25", "10-26", "10-27", "10-28", "10-29", "10-30", "10-31", "11-01", "11-02", "11-03", "11-04", "11-05", "11-06", "11-07", "11-08", "11-09", "11-10", "11-11", "11-12", "11-13", "11-14", "11-15", "11-16", "11-17", "11-18", "11-19", "11-20", "11-21", "11-22", "11-23", "11-24"],
     datasets: [
       {
         label: 'Cumulative P&L ($)',
-        data: [-7.71, -36.77, -25.57, -49.13, -61.86, -65.01, -78.05, -88.47, -97.43, -119.06, -124.02, -150.67, -146.55, -167.31, -172.34, -157.15, -149.31, -182.67, -187.34, -213.32, -210.92, -224.13, -230.16, -247.78, -246.41, -238.91, -247.96, -227.21, -217.02, -226.07, -240.38, -250.01, -248.87, -239.08, -229.41, -191.39, -193.4, -184.72, -197.01, -197.25, -209.5, -212.79, -216.72, -214.0, -220.79],
+        data: [-29.06, -17.86, -41.42, -54.15, -57.3, -70.34, -80.76, -89.72, -111.35, -116.31, -142.96, -138.84, -159.6, -164.63, -149.44, -141.6, -174.96, -179.63, -205.61, -203.21, -216.42, -222.45, -240.07, -238.7, -231.2, -240.25, -219.5, -209.31, -218.36, -232.67, -242.3, -241.16, -231.37, -221.7, -183.68, -185.69, -177.01, -189.3, -189.54, -201.79, -205.08, -209.01, -206.29, -213.08, -218.28],
         borderColor: '#E8A33D',
         backgroundColor: 'rgba(232, 163, 61, 0.12)',
         borderWidth: 2,
