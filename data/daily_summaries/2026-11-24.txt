@@ -1,0 +1,44 @@
+=== Predict Weather Bot v6.3 — 2026-11-24 ===
+Mode: PAPER
+
+Yesterday: $-6.79 (2W / 3L)  |  Deployed: $19.34/$50  |  Open: 4
+
+⚠ 1 position(s) open longer than 36h - worth checking directly on Kalshi:
+  Los Angeles: high 67-68°F, open 50h [KXHIGHLAX-26NOV22-B67.5]
+
+New trades, last 24h (1):
+  New York: NO on high 68-69°F @ 68c (16% conf) [KXHIGHNY-26NOV23-B68.5]
+
+Settled, last 24h (5):
+  Chicago: NO on high 60-61°F — LOST -4.84 [KXHIGHCHI-26NOV22-B60.5]
+  New York: NO on high < 61°F — WON +4.92  |  actual: high ≥ 61°F [KXHIGHNY-26NOV22-T61]
+  Miami: YES on high 83-84°F — LOST -5.23 [KXHIGHMIA-26NOV22-B83.5]
+  Austin: NO on high 73-74°F — LOST -5.02 [KXHIGHAUS-26NOV22-B73.5]
+  Chicago: NO on high 58-59°F — WON +3.38 [KXHIGHCHI-26NOV22-B58.5]
+
+Net P&L, last 24h: $-6.79
+
+Model self-audit (v6.3, 45 trades, lower is better): model 0.2838 | market price 0.2141 | base rate 0.2499 — NO SKILL ⚠, WORSE than the market
+  By version (model/market): v4* 0.501/0.174 (n=97)  v5* 0.457/0.108 (n=132)  v6.0* 0.602/0.010 (n=3)  v6.1.1 0.218/0.161 (n=36)  v6.2* 0.386/0.245 (n=63)  v6.3 0.284/0.214 (n=45)
+  * used the wrong NBM column (overnight low); not a test of NBM
+
+Model vs market, ALL markets observed (unbiased; lower is better):
+  Atlanta (shadow): n=114  model 0.117 (unclamped 0.117)  market 0.080  -> market closer
+  Austin: n=108  model 0.124 (unclamped 0.125)  market 0.085  -> market closer
+  Boston (shadow): n=114  model 0.164 (unclamped 0.165)  market 0.107  -> market closer
+  Chicago: n=108  model 0.148 (unclamped 0.148)  market 0.089  -> market closer
+  Dallas (shadow): n=114  model 0.114 (unclamped 0.113)  market 0.064  -> market closer
+  Denver (shadow): n=114  model 0.129 (unclamped 0.129)  market 0.114  -> market closer
+  Houston (shadow): n=114  model 0.120 (unclamped 0.120)  market 0.094  -> market closer
+  Los Angeles: n=102  model 0.118 (unclamped 0.117)  market 0.110  -> market closer
+  Miami: n=114  model 0.114 (unclamped 0.114)  market 0.088  -> market closer
+  Minneapolis (shadow): n=114  model 0.112 (unclamped 0.112)  market 0.085  -> market closer
+  New York: n=114  model 0.116 (unclamped 0.116)  market 0.103  -> market closer
+  Phoenix (shadow): n=114  model 0.119 (unclamped 0.118)  market 0.097  -> market closer
+  Seattle (shadow) (EXCLUDED from ALL: forecasts known to be off): n=108  model 0.201 (unclamped 0.210)  market 0.114  -> market closer
+  ALL: n=1344  model 0.124 (unclamped 0.124)  market 0.093
+  STOPPING RULE: 224/300 city-days scored so far. Model is BEHIND the market by 0.032. Decide at 300.
+
+14-day P&L: ▂▄▄█▂▃▁▂▁▂▂▃▁▂  (range $-12 to $+38, cumulative $+29.22)
+
+Simulated — no real money at risk. Consider live mode once these numbers look sane for a couple of weeks.
