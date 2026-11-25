@@ -138,15 +138,15 @@
 
   <h1>Predict Weather Bot <span style="font-weight:400;opacity:.6">v6.3</span></h1>
   <div class="hero">
-    <div class="hero-number loss">$-443.78</div>
-    <div class="hero-label">Total settled P&amp;L, 383 trade(s) settled, 43% win rate</div>
+    <div class="hero-number loss">$-448.71</div>
+    <div class="hero-label">Total settled P&amp;L, 384 trade(s) settled, 42% win rate</div>
   </div>
 
   <div class="conditions">
     <div><span class="label">Mode</span><span class="value">PAPER</span></div>
-    <div><span class="label">Deployed</span><span class="value">$32.82 / $50.00</span></div>
-    <div><span class="label">Open positions</span><span class="value">7</span></div>
-    <div><span class="label">Last updated</span><span class="value">2026-11-25 14:55 UTC</span></div>
+    <div><span class="label">Deployed</span><span class="value">$42.47 / $50.00</span></div>
+    <div><span class="label">Open positions</span><span class="value">9</span></div>
+    <div><span class="label">Last updated</span><span class="value">2026-11-25 23:30 UTC</span></div>
   </div>
 
   <section>
@@ -175,10 +175,10 @@
         </tr>
         <tr>
           <td>Los Angeles</td>
-          <td>75</td>
+          <td>76</td>
           <td>31</td>
-          <td>44</td>
-          <td class="loss">$-119.60</td>
+          <td>45</td>
+          <td class="loss">$-124.53</td>
         </tr>
         <tr>
           <td>Miami</td>
@@ -198,11 +198,41 @@
   </section>
 
   <section>
-    <h2>Open positions (7)</h2>
+    <h2>Open positions (9)</h2>
     <p class="neutral" style="margin: 4px 0 12px">Market day = the date the contract is about. Opened/settled times are UTC.</p>
     <table>
       <tr><th>City</th><th>Market day</th><th>Contract</th><th>Side</th><th>Position</th><th>Model</th><th>Opened</th><th>Status</th></tr>
       
+    <tr>
+      <td>Los Angeles</td>
+      <td>Nov 26</td>
+      <td>high 82-83°F</td>
+      <td>NO</td>
+      <td>8x @ 57&cent;</td>
+      <td>14%</td>
+      <td class="neutral">Nov 25, 23:30 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
+    <tr>
+      <td>Miami</td>
+      <td>Nov 26</td>
+      <td>high 78-79°F</td>
+      <td>NO</td>
+      <td>10x @ 49&cent;</td>
+      <td>17%</td>
+      <td class="neutral">Nov 25, 23:30 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
+    <tr>
+      <td>New York</td>
+      <td>Nov 26</td>
+      <td>high < 56°F</td>
+      <td>NO</td>
+      <td>31x @ 16&cent;</td>
+      <td>38%</td>
+      <td class="neutral">Nov 25, 23:30 UTC</td>
+      <td class="neutral">open</td>
+    </tr>
     <tr>
       <td>Los Angeles</td>
       <td>Nov 25</td>
@@ -263,16 +293,6 @@
       <td class="neutral">Nov 24, 21:33 UTC</td>
       <td class="neutral">open</td>
     </tr>
-    <tr>
-      <td>Los Angeles</td>
-      <td>Nov 24</td>
-      <td>high 74-75°F</td>
-      <td>NO</td>
-      <td>9x @ 53&cent;</td>
-      <td>32%</td>
-      <td class="neutral">Nov 24, 11:41 UTC</td>
-      <td class="neutral">open</td>
-    </tr>
     </table>
   </section>
 
@@ -281,6 +301,16 @@
     <table>
       <tr><th>City</th><th>Market day</th><th>Contract</th><th>Side</th><th>Position</th><th>Model</th><th>Opened</th><th>Outcome</th><th>Settled</th></tr>
       
+    <tr>
+      <td>Los Angeles</td>
+      <td>Nov 24</td>
+      <td>high 74-75°F</td>
+      <td>NO</td>
+      <td>9x @ 53&cent;</td>
+      <td>32%</td>
+      <td class="neutral">Nov 24, 11:41 UTC</td>
+      <td class="loss">YES &middot; $-4.93</td><td class="neutral">Nov 25, 23:29 UTC</td>
+    </tr>
     <tr>
       <td>New York</td>
       <td>Nov 24</td>
@@ -521,16 +551,6 @@
       <td class="neutral">Nov 18, 18:53 UTC</td>
       <td class="loss">YES &middot; $-5.02</td><td class="neutral">Nov 20, 14:23 UTC</td>
     </tr>
-    <tr>
-      <td>Austin</td>
-      <td>Nov 18</td>
-      <td>high 70-71°F</td>
-      <td>NO</td>
-      <td>7x @ 67&cent;</td>
-      <td>16%</td>
-      <td class="neutral">Nov 18, 10:12 UTC</td>
-      <td class="gain">NO &middot; $+2.20</td><td class="neutral">Nov 19, 17:40 UTC</td>
-    </tr>
     </table>
   </section>
 
@@ -652,10 +672,10 @@
     <h2>Model self-audit (Brier score)</h2>
     
         <div class="brier-grid">
-          <div><span class="label">Trades audited</span><span class="value">52</span></div>
-          <div><span class="label">Model Brier score</span><span class="value">0.2815</span></div>
-          <div><span class="label">Market price Brier</span><span class="value">0.2191</span></div>
-          <div><span class="label">Base rate Brier score</span><span class="value">0.2496</span></div>
+          <div><span class="label">Trades audited</span><span class="value">53</span></div>
+          <div><span class="label">Model Brier score</span><span class="value">0.2850</span></div>
+          <div><span class="label">Market price Brier</span><span class="value">0.2203</span></div>
+          <div><span class="label">Base rate Brier score</span><span class="value">0.2499</span></div>
           <div><span class="label">Verdict</span><span class="value loss">NO SKILL</span></div>
         </div>
         <p class="neutral">(early read, 100+ needed for full confidence)</p>
@@ -675,7 +695,7 @@ new Chart(ctx, {
     datasets: [
       {
         label: 'Cumulative P&L ($)',
-        data: [11.2, -12.36, -25.09, -28.24, -41.28, -51.7, -60.66, -82.29, -87.25, -113.9, -109.78, -130.54, -135.57, -120.38, -112.54, -145.9, -150.57, -176.55, -174.15, -187.36, -193.39, -211.01, -209.64, -202.14, -211.19, -190.44, -180.25, -189.3, -203.61, -213.24, -212.1, -202.31, -192.64, -154.62, -156.63, -147.95, -160.24, -160.48, -172.73, -176.02, -179.95, -177.23, -184.02, -191.09, -180.7],
+        data: [11.2, -12.36, -25.09, -28.24, -41.28, -51.7, -60.66, -82.29, -87.25, -113.9, -109.78, -130.54, -135.57, -120.38, -112.54, -145.9, -150.57, -176.55, -174.15, -187.36, -193.39, -211.01, -209.64, -202.14, -211.19, -190.44, -180.25, -189.3, -203.61, -213.24, -212.1, -202.31, -192.64, -154.62, -156.63, -147.95, -160.24, -160.48, -172.73, -176.02, -179.95, -177.23, -184.02, -191.09, -185.63],
         borderColor: '#E8A33D',
         backgroundColor: 'rgba(232, 163, 61, 0.12)',
         borderWidth: 2,
