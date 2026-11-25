@@ -1,0 +1,39 @@
+name: Check Liquidity Rewards
+
+# Manual only. Step 1 of the liquidity study (2026-11-24): pulls every Kalshi
+# reward program (past and present), reports how much liquidity reward weather
+# markets get, and gives a PASS / MARGINAL / STOP verdict by a rule fixed in
+# advance (see src/check_incentives.py). Read-only: no trades, no database
+# writes, nothing committed. Download the "liquidity-rewards-check" artifact
+# and upload it to Claude.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check liquidity rewards
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: python -m src.check_incentives | tee liquidity_rewards_check.txt
+
+      - name: Save as a downloadable file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquidity-rewards-check
+          path: liquidity_rewards_check.txt
