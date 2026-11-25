@@ -1,0 +1,51 @@
+name: Minute Study Report
+
+# Manual only. Builds the minute study report from data/minute/ (src/minute_report.py).
+#   health - any time: coverage, gaps, and how often books are empty or wide by hour.
+#            No profit numbers, so checking early can't bias the test.
+#   warmup - any time: checks A-D on the unscored days before Dec 1, to catch bugs on
+#            real data early (bug fixes only; never used to change the test).
+#   final  - after collection ends (2026-12-15 06:00 UTC): the full pass/fail test.
+# Download the "minute-report" artifact and upload it to Claude.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "health or warmup (any time), final (after Dec 15)"
+        required: true
+        default: "health"
+        type: choice
+        options: [health, warmup, final]
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repo (latest)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build report
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: |
+          set -o pipefail
+          python -m src.minute_report --mode "${{ github.event.inputs.mode }}" | tee minute_report.txt
+
+      - name: Save as a downloadable file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minute-report
+          path: minute_report.txt

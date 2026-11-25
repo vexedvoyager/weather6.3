@@ -1,0 +1,84 @@
+name: Minute Recorder
+
+# Records the best bid/ask of every open daily high/low temperature market once a
+# minute (src/minute_recorder.py). Read-only: never trades, never touches
+# data/trades.db. Each run records ~5.75 hours and saves one new file,
+# data/minute/chunk_<UTC start>.db.gz. A new run is queued every 3 hours and starts
+# as soon as the previous one finishes, so coverage is nearly continuous.
+# Collection stops by itself on 2026-12-15 06:00 UTC; after that each run exits at
+# once. Disable this workflow then (Actions -> Minute Recorder -> ... -> Disable).
+on:
+  schedule:
+    - cron: "7 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Minutes to record in this run (max ~345)"
+        required: false
+        default: "345"
+
+concurrency:
+  group: minute-recorder        # one recorder at a time; the next waits its turn
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 358
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Record
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: python -m src.minute_recorder --minutes "${{ github.event.inputs.minutes || '345' }}"
+
+      - name: Save the new chunk to the repo
+        if: always()
+        run: |
+          # Same worktree-based save as the other research workflows: each try starts
+          # from a fresh copy of the latest branch, so it never gets stuck mid-rebase.
+          # This run only ADDS its own new file, so it can't overwrite anything.
+          publish() {
+            msg="$1"; shift
+            for i in 1 2 3 4 5 6; do
+              rm -rf /tmp/pub; git worktree prune
+              if git fetch -q origin "$GITHUB_REF_NAME" && git worktree add -q --detach /tmp/pub FETCH_HEAD; then
+                added=""
+                for f in "$@"; do
+                  if [ -f "$f" ]; then mkdir -p "/tmp/pub/$(dirname "$f")"; cp "$f" "/tmp/pub/$f"; added="$added $f"; fi
+                done
+                if [ -z "$added" ]; then return 0; fi
+                if (cd /tmp/pub && git add $added && { git diff --cached --quiet || \
+                      { git -c user.name="predict-weather-bot" -c user.email="actions@github.com" commit -q -m "$msg" && \
+                        git push -q origin "HEAD:$GITHUB_REF_NAME"; }; }); then
+                  rm -rf /tmp/pub; git worktree prune; return 0
+                fi
+              fi
+              echo "save attempt $i failed; retrying"
+              sleep $((i * 15))
+            done
+            echo "::warning::could not save the chunk to the repo after 6 tries; it is in this run's downloadable artifact"
+            return 0
+          }
+          files=$(ls data/minute/chunk_*.db.gz 2>/dev/null | while read f; do git ls-files --error-unmatch "$f" >/dev/null 2>&1 || echo "$f"; done)
+          [ -n "$files" ] && publish "Minute recorder chunk" $files || echo "no new chunk to save"
+
+      - name: Keep a downloadable copy
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minute-chunk-${{ github.run_id }}
+          path: data/minute/chunk_*.db.gz
+          if-no-files-found: ignore
+          retention-days: 30
